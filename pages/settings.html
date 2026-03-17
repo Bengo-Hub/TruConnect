@@ -1,0 +1,2240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruConnect - Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    :root {
+      --primary: #D4AF37;
+      --primary-dark: #B8860B;
+      --primary-light: #FFD700;
+      --secondary: #800020;
+      --secondary-dark: #5E1914;
+      --bg: #121212;
+      --darker: #0a0a0a;
+      --card-bg: #1e1e1e;
+      --text: #f5f5f5;
+      --text-secondary: #b0b0b0;
+      --border: #333;
+      --success: #4CAF50;
+      --danger: #f44336;
+      --warning: #FFC107;
+      --info: #2196F3;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .settings-wrapper {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Sidebar tabs */
+    .settings-sidebar {
+      width: 220px;
+      background: var(--darker);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-header h1 i {
+      color: var(--primary);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 15px 0;
+      overflow-y: auto;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: rgba(212, 175, 55, 0.1);
+      color: var(--text);
+    }
+
+    .sidebar-item.active {
+      background: rgba(212, 175, 55, 0.1);
+      color: var(--primary);
+      border-left-color: var(--primary);
+    }
+
+    .sidebar-item i {
+      width: 20px;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 15px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-close {
+      width: 100%;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-close:hover {
+      background: rgba(244, 67, 54, 0.1);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    /* Main content */
+    .settings-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .settings-header {
+      padding: 20px 25px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .settings-title {
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .settings-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 25px;
+    }
+
+    /* Tab panels */
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* Form styles */
+    .form-section {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .form-section-title {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--primary);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .form-group label small {
+      color: var(--text-secondary);
+      font-weight: 400;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 15px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Roboto', sans-serif;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+    }
+
+    .form-control::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    .form-row-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    /* Select styling */
+    select.form-control {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: #0a0a0a !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23b0b0b0' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 15px center;
+      padding-right: 40px;
+      color: #f5f5f5 !important;
+      cursor: pointer;
+    }
+
+    /* Style for dropdown options - critical for visibility */
+    select.form-control option {
+      background-color: #1e1e1e !important;
+      color: #f5f5f5 !important;
+      padding: 12px 15px;
+    }
+
+    select.form-control option:hover,
+    select.form-control option:focus {
+      background-color: #333 !important;
+      color: #f5f5f5 !important;
+    }
+
+    select.form-control option:checked {
+      background: linear-gradient(0deg, #D4AF37 0%, #D4AF37 100%) !important;
+      color: #000 !important;
+    }
+
+    /* Firefox specific fix */
+    @-moz-document url-prefix() {
+      select.form-control option {
+        background-color: #1e1e1e;
+        color: #f5f5f5;
+      }
+    }
+
+    /* Toggle switch */
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 26px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--border);
+      border-radius: 26px;
+      transition: 0.3s;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+
+    input:checked + .toggle-slider {
+      background: var(--primary);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    /* Mode selector cards */
+    .mode-selector {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    .mode-card {
+      background: rgba(0, 0, 0, 0.2);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .mode-card:hover {
+      border-color: rgba(212, 175, 55, 0.5);
+    }
+
+    .mode-card.active {
+      border-color: var(--primary);
+      background: rgba(212, 175, 55, 0.1);
+    }
+
+    .mode-card i {
+      font-size: 2rem;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .mode-card h4 {
+      font-size: 1rem;
+      margin-bottom: 5px;
+    }
+
+    .mode-card p {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    /* Theme selector */
+    .theme-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .theme-option {
+      padding: 15px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: center;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+
+    .theme-option:hover {
+      transform: translateY(-2px);
+    }
+
+    .theme-option.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+    }
+
+    .theme-light {
+      background: #f8f9fa;
+      color: #212529;
+    }
+
+    .theme-dark {
+      background: #1a1a2e;
+      color: #e6e6e6;
+    }
+
+    .theme-system {
+      background: linear-gradient(135deg, #f8f9fa 50%, #1a1a2e 50%);
+      color: #212529;
+    }
+
+    /* RDU config items */
+    .rdu-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .rdu-item {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 20px;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+
+    .rdu-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .rdu-item-title {
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .btn-remove-rdu {
+      background: var(--danger);
+      color: white;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-remove-rdu:hover {
+      transform: scale(1.1);
+    }
+
+    .btn-add {
+      padding: 12px 20px;
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px dashed var(--primary);
+      border-radius: 10px;
+      color: var(--primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-add:hover {
+      background: rgba(212, 175, 55, 0.2);
+    }
+
+    /* Status bubble for connection indicators */
+    .status-bubble {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-left: 10px;
+      vertical-align: middle;
+      position: relative;
+    }
+
+    .status-bubble.connected {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .status-bubble.connecting {
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary);
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-bubble.disconnected {
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    .status-bubble.disabled {
+      background: var(--border);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* URL display box */
+    .url-display {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px 15px;
+      border-radius: 8px;
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--primary);
+      border: 1px solid var(--border);
+      word-break: break-all;
+    }
+
+    /* Panel configuration items */
+    .panel-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 12px;
+    }
+
+    .panel-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .panel-item-title {
+      font-weight: 500;
+      color: var(--primary);
+      font-size: 0.95rem;
+    }
+
+    .panel-item .form-row {
+      margin-bottom: 0;
+    }
+
+    .panel-item .form-group {
+      margin-bottom: 0;
+    }
+
+    .panel-item .form-control {
+      padding: 10px 12px;
+      font-size: 0.9rem;
+    }
+
+    /* Error label for connection status */
+    .connection-error {
+      display: none;
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--danger);
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+
+    .connection-error.show {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* About section */
+    .about-card {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .about-logo {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 20px;
+      filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.5));
+    }
+
+    .about-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    .about-version {
+      color: var(--text-secondary);
+      margin-bottom: 30px;
+    }
+
+    .about-info {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      text-align: left;
+      margin-top: 30px;
+    }
+
+    .about-info-item {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .about-info-item label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .about-info-item span {
+      color: var(--text);
+    }
+
+    /* Footer buttons */
+    .settings-footer {
+      padding: 15px 25px;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Status toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 15px 25px;
+      border-radius: 10px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      animation: slideIn 0.3s ease;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      display: flex;
+    }
+
+    .toast.success {
+      background: rgba(76, 175, 80, 0.9);
+      color: white;
+    }
+
+    .toast.error {
+      background: rgba(244, 67, 54, 0.9);
+      color: white;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-wrapper">
+    <!-- Sidebar -->
+    <aside class="settings-sidebar">
+      <div class="sidebar-header">
+        <h1><i class="fas fa-cog"></i> Settings</h1>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-item active" data-tab="general">
+          <i class="fas fa-sliders-h"></i>
+          <span>General</span>
+        </div>
+        <div class="sidebar-item" data-tab="input">
+          <i class="fas fa-plug"></i>
+          <span>Input Sources</span>
+        </div>
+        <div class="sidebar-item" data-tab="output">
+          <i class="fas fa-broadcast-tower"></i>
+          <span>Output</span>
+        </div>
+        <div class="sidebar-item" data-tab="rdu">
+          <i class="fas fa-tv"></i>
+          <span>RDU Displays</span>
+        </div>
+        <div class="sidebar-item" data-tab="thresholds">
+          <i class="fas fa-balance-scale"></i>
+          <span>Thresholds</span>
+        </div>
+        <div class="sidebar-item" data-tab="backend">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <span>Backend</span>
+        </div>
+        <div class="sidebar-item" data-tab="appearance">
+          <i class="fas fa-palette"></i>
+          <span>Appearance</span>
+        </div>
+        <div class="sidebar-item" data-tab="about">
+          <i class="fas fa-info-circle"></i>
+          <span>About</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-close" id="btn-close">
+          <i class="fas fa-times"></i>
+          Close
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="settings-main">
+      <header class="settings-header">
+        <h2 class="settings-title" id="panel-title">General Settings</h2>
+      </header>
+
+      <div class="settings-content">
+        <!-- General Tab -->
+        <div class="tab-panel active" id="general-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-building"></i> Station Configuration</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="station-name">Station Name</label>
+                <input type="text" id="station-name" class="form-control" placeholder="e.g., Webuye Weighbridge">
+              </div>
+              <div class="form-group">
+                <label for="station-code">Station Code</label>
+                <input type="text" id="station-code" class="form-control" placeholder="e.g., ROMIA">
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="toggle-wrapper">
+                <div>
+                  <label>Bidirectional Station</label>
+                  <small style="color: var(--text-secondary);">Support A/B bounds (inbound/outbound)</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="bidirectional">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-weight-hanging"></i> Capture Mode</h3>
+            <div class="mode-selector">
+              <div class="mode-card active" data-mode="multideck">
+                <i class="fas fa-layer-group"></i>
+                <h4>Multideck</h4>
+                <p>Fixed platform scales with multiple decks</p>
+              </div>
+              <div class="mode-card" data-mode="mobile">
+                <i class="fas fa-truck-moving"></i>
+                <h4>Mobile Scale</h4>
+                <p>Portable axle-by-axle weighing</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input Tab -->
+        <div class="tab-panel" id="input-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-microchip"></i> Input Source Selection</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Select the active input source. Only ONE source can be active at a time.
+            </p>
+            <div class="form-group">
+              <label for="active-source">Active Input Source</label>
+              <select id="active-source" class="form-control">
+                <option value="none">None (Simulation Mode)</option>
+                <optgroup label="Mobile Scales (Axle-by-Axle)">
+                  <option value="paw">PAW - Portable Axle Weigher (Serial)</option>
+                  <option value="haenni">Haenni WL - Portable Scale (API)</option>
+                  <option value="mcgs">MCGS - Mobile Scale (Serial)</option>
+                </optgroup>
+                <optgroup label="Multideck Indicators (Platform)">
+                  <option value="indicator_zm">ZM Protocol (Avery Weigh-Tronix, Ohaus)</option>
+                  <option value="indicator_cardinal">Cardinal Scale (Model 190/210)</option>
+                  <option value="indicator_cardinal2">Cardinal Scale (Model 225/738)</option>
+                  <option value="indicator_1310">Rice Lake 1310 Indicator</option>
+                  <option value="custom">Custom Protocol</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          <!-- PAW Configuration -->
+          <div class="form-section" id="paw-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-truck-loading"></i> PAW Portable Axle Weigher</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Serial connection to PAW weight console. Queries combined axle weight (Scale A+B).
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="paw-port">COM Port</label>
+                <input type="text" id="paw-port" class="form-control" placeholder="COM7" value="COM7">
+              </div>
+              <div class="form-group">
+                <label for="paw-baud">Baud Rate</label>
+                <select id="paw-baud" class="form-control">
+                  <option value="9600" selected>9600</option>
+                  <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="paw-query">Query Command
+                <small>Command sent to request weight (default: 'W')</small>
+              </label>
+              <input type="text" id="paw-query" class="form-control" placeholder="W" value="W">
+            </div>
+          </div>
+
+          <!-- Haenni Configuration -->
+          <div class="form-section" id="haenni-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-wifi"></i> Haenni WL Portable Scale</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              HTTP API connection to Haenni WebServer for weight measurements.
+            </p>
+            <div class="form-group">
+              <label for="haenni-url">API URL
+                <small>Haenni WebServer measurement endpoint</small>
+              </label>
+              <input type="text" id="haenni-url" class="form-control" placeholder="http://localhost:8888/devices/measurements" value="http://localhost:8888/devices/measurements">
+            </div>
+            <div class="form-group">
+              <label for="haenni-interval">Poll Interval (ms)</label>
+              <input type="number" id="haenni-interval" class="form-control" placeholder="500" value="500">
+            </div>
+          </div>
+
+          <!-- MCGS Configuration -->
+          <div class="form-section" id="mcgs-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-weight-hanging"></i> MCGS Mobile Scale (Serial)</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Serial connection to MCGS console. Frames: <code>=SG+0000123kR</code> or <code>=SG+0000060kX</code> (A+B combined).
+              Optional commands trigger console weigh/zero/stop (STX=0x02, ETX=0x03). Leave empty to use defaults.
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mcgs-port">COM Port</label>
+                <input type="text" id="mcgs-port" class="form-control" placeholder="COM3" value="COM3">
+              </div>
+              <div class="form-group">
+                <label for="mcgs-baud">Baud Rate</label>
+                <select id="mcgs-baud" class="form-control">
+                  <option value="9600" selected>9600</option>
+                  <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" style="margin-top: 16px;">
+              <div class="form-group">
+                <label for="mcgs-cmd-weigh">Weigh command <small>(STX 'A' ETX → request current axle GVW)</small></label>
+                <input type="text" id="mcgs-cmd-weigh" class="form-control" placeholder="\x02A\x03">
+              </div>
+              <div class="form-group">
+                <label for="mcgs-cmd-zero">Zero command <small>(STX 'D' ETX)</small></label>
+                <input type="text" id="mcgs-cmd-zero" class="form-control" placeholder="\x02D\x03">
+              </div>
+              <div class="form-group">
+                <label for="mcgs-cmd-stop">Stop command <small>(cancel session)</small></label>
+                <input type="text" id="mcgs-cmd-stop" class="form-control" placeholder="STOP\r\n">
+              </div>
+            </div>
+          </div>
+
+          <!-- Multideck Indicator Configuration -->
+          <div class="form-section" id="indicator-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-server"></i> Multideck Indicator</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="indicator-connection">Connection Type</label>
+                <select id="indicator-connection" class="form-control">
+                  <option value="serial">Serial Port</option>
+                  <option value="tcp">TCP/IP Network</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="indicator-query">Query Command
+                  <small>Leave empty for continuous output</small>
+                </label>
+                <input type="text" id="indicator-query" class="form-control" placeholder="W">
+              </div>
+            </div>
+
+            <!-- Serial Settings -->
+            <div id="indicator-serial-settings" class="form-row">
+              <div class="form-group">
+                <label for="indicator-port">COM Port</label>
+                <input type="text" id="indicator-port" class="form-control" placeholder="COM1" value="COM1">
+              </div>
+              <div class="form-group">
+                <label for="indicator-baud">Baud Rate</label>
+                <select id="indicator-baud" class="form-control">
+                  <option value="9600" selected>9600</option>
+                  <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                  <option value="57600">57600</option>
+                  <option value="115200">115200</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- TCP Settings -->
+            <div id="indicator-tcp-settings" class="form-row" style="display: none;">
+              <div class="form-group">
+                <label for="indicator-tcp-host">Host/IP</label>
+                <input type="text" id="indicator-tcp-host" class="form-control" placeholder="192.168.1.100">
+              </div>
+              <div class="form-group">
+                <label for="indicator-tcp-port">Port</label>
+                <input type="number" id="indicator-tcp-port" class="form-control" placeholder="4001" value="4001">
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Protocol Configuration -->
+          <div class="form-section" id="custom-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-code"></i> Custom Protocol</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="custom-connection">Connection Type</label>
+                <select id="custom-connection" class="form-control">
+                  <option value="serial">Serial Port</option>
+                  <option value="tcp">TCP/IP Network</option>
+                  <option value="udp">UDP Server</option>
+                  <option value="api">HTTP API</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="custom-terminator">Message Terminator</label>
+                <input type="text" id="custom-terminator" class="form-control" placeholder="\r\n" value="\r\n">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="custom-regex">Weight Regex Pattern
+                <small>Capture group for weight value</small>
+              </label>
+              <input type="text" id="custom-regex" class="form-control" placeholder="(\d+)" value="(\d+)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Tab -->
+        <div class="tab-panel" id="output-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-broadcast-tower"></i> Output Mode</h3>
+            <div class="mode-selector">
+              <div class="mode-card active" data-output="realtime">
+                <i class="fas fa-bolt"></i>
+                <h4>Realtime (WebSocket)</h4>
+                <p>Two-way communication</p>
+              </div>
+              <div class="mode-card" data-output="polling">
+                <i class="fas fa-sync"></i>
+                <h4>Polling (REST API)</h4>
+                <p>HTTP endpoints</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3 class="form-section-title">
+              <i class="fas fa-server"></i> WebSocket Server
+              <span class="status-bubble" id="ws-status" title="WebSocket Status"></span>
+            </h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ws-port">Port</label>
+                <input type="number" id="ws-port" class="form-control" value="3030">
+              </div>
+              <div class="form-group">
+                <label>Active URL</label>
+                <div class="url-display" id="ws-url">ws://localhost:3030</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3 class="form-section-title">
+              <i class="fas fa-cloud"></i> REST API Server
+              <span class="status-bubble" id="api-status" title="API Status"></span>
+            </h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="api-server-port">Port</label>
+                <input type="number" id="api-server-port" class="form-control" value="3031">
+              </div>
+              <div class="form-group">
+                <label>Active URL</label>
+                <div class="url-display" id="api-url-display">http://localhost:3031/weights</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RDU Tab -->
+        <div class="tab-panel" id="rdu-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-tv"></i> RDU Display Configuration</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Configure a Remote Display Unit (RDU) for showing weights. Only one RDU device can be active at a time.
+            </p>
+
+            <!-- RDU Enable Toggle -->
+            <div class="form-group">
+              <div class="toggle-wrapper">
+                <div>
+                  <label>Enable RDU Output</label>
+                  <small style="color: var(--text-secondary);">Send weights to configured display panels</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="rdu-enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- RDU Config (shown when enabled) -->
+            <div id="rdu-config" style="display: none;">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="rdu-model">RDU Model</label>
+                  <select id="rdu-model" class="form-control">
+                    <option value="KELI">KELI</option>
+                    <option value="YAOHUA">Yaohua</option>
+                    <option value="GENERIC">Generic (Custom Format)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="rdu-name">Display Name</label>
+                  <input type="text" id="rdu-name" class="form-control" placeholder="e.g., Main RDU">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="rdu-connection-type">Connection Type</label>
+                  <select id="rdu-connection-type" class="form-control">
+                    <option value="serial">Direct Serial (COM Port)</option>
+                    <option value="usr">Network (USR-TCP232)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="rdu-panel-count">Number of Panels</label>
+                  <select id="rdu-panel-count" class="form-control">
+                    <option value="1">1 (GVW only)</option>
+                    <option value="2">2 (Deck 1, GVW)</option>
+                    <option value="4">4 (Deck 1-4)</option>
+                    <option value="5" selected>5 (Deck 1-4 + GVW)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- USR Network Config (shown when connection type is USR) -->
+              <div id="usr-config" style="display: none;">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="usr-ip">USR Device IP</label>
+                    <input type="text" id="usr-ip" class="form-control" placeholder="192.168.4.93">
+                  </div>
+                  <div class="form-group">
+                    <label for="usr-port">USR Device Port</label>
+                    <input type="number" id="usr-port" class="form-control" value="4196">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Message Format -->
+              <div class="form-group" id="format-group">
+                <label for="rdu-format">Message Format
+                  <small>Use {WEIGHT} for weight value (e.g., $={WEIGHT}=)</small>
+                </label>
+                <input type="text" id="rdu-format" class="form-control" value="$={WEIGHT}=" placeholder="$={WEIGHT}=">
+              </div>
+
+              <!-- Panel Configuration -->
+              <div class="form-group">
+                <label style="margin-bottom: 15px; display: block;">Panel Configuration</label>
+                <div id="panel-configs">
+                  <!-- Panels will be generated dynamically -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thresholds Tab -->
+        <div class="tab-panel" id="thresholds-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-balance-scale"></i> Weight Thresholds</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="min-weight">Minimum Valid Weight (kg)
+                  <small>Weights below this are ignored</small>
+                </label>
+                <input type="number" id="min-weight" class="form-control" value="200">
+              </div>
+              <div class="form-group">
+                <label for="max-weight">Maximum Valid Weight (kg)
+                  <small>Weights above this trigger alert</small>
+                </label>
+                <input type="number" id="max-weight" class="form-control" value="100000">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="vehicle-detection">Vehicle Detection (kg)
+                  <small>Weight to detect vehicle presence</small>
+                </label>
+                <input type="number" id="vehicle-detection" class="form-control" value="500">
+              </div>
+              <div class="form-group">
+                <label for="stable-tolerance">Stable Tolerance (kg)
+                  <small>Variation allowed for stable reading</small>
+                </label>
+                <input type="number" id="stable-tolerance" class="form-control" value="50">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-truck"></i> Mobile Mode Settings</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="max-axles">Maximum Axles
+                  <small>Per vehicle</small>
+                </label>
+                <input type="number" id="max-axles" class="form-control" value="12">
+              </div>
+              <div class="form-group">
+                <label for="axle-prompt-timeout">Axle Prompt Timeout (ms)
+                  <small>Time before auto-dismiss</small>
+                </label>
+                <input type="number" id="axle-prompt-timeout" class="form-control" value="5000">
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="toggle-wrapper">
+                <div>
+                  <label>Require Stable Reading</label>
+                  <small style="color: var(--text-secondary);">Only allow capture when weight is stable</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="require-stable" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Backend Integration Tab -->
+        <div class="tab-panel" id="backend-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-cloud-upload-alt"></i> Backend Integration</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Connect TruConnect to the TruLoad backend for automatic weighing data submission.
+            </p>
+            <div class="form-group">
+              <div class="toggle-wrapper">
+                <div>
+                  <label>Enable Backend Integration</label>
+                  <small style="color: var(--text-secondary);">Sync weighing data with TruLoad backend API</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="backend-enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="backend-config" style="display: none;">
+            <div class="form-section">
+              <h3 class="form-section-title">
+                <i class="fas fa-server"></i> API Connection
+                <span class="status-bubble" id="backend-status" title="Backend Status"></span>
+              </h3>
+              <div class="form-group">
+                <label for="backend-url">Backend API URL
+                  <small>TruLoad backend server address</small>
+                </label>
+                <input type="text" id="backend-url" class="form-control" placeholder="http://localhost:4000">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="backend-auth-endpoint">Auth Endpoint</label>
+                  <input type="text" id="backend-auth-endpoint" class="form-control" placeholder="/api/v1/auth/login" value="/api/v1/auth/login">
+                </div>
+                <div class="form-group">
+                  <label for="backend-autoweigh-endpoint">Autoweigh Endpoint</label>
+                  <input type="text" id="backend-autoweigh-endpoint" class="form-control" placeholder="/api/v1/weighing-transactions/autoweigh" value="/api/v1/weighing-transactions/autoweigh">
+                </div>
+              </div>
+              <div class="connection-error" id="backend-connection-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="backend-error-text"></span>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h3 class="form-section-title"><i class="fas fa-key"></i> Service Account Credentials</h3>
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Middleware authenticates with the backend using a dedicated service account.
+              </p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="backend-email">Email
+                    <small>Service account email</small>
+                  </label>
+                  <input type="text" id="backend-email" class="form-control" placeholder="middleware@truconnect.local">
+                </div>
+                <div class="form-group">
+                  <label for="backend-password">Password
+                    <small>Service account password</small>
+                  </label>
+                  <input type="password" id="backend-password" class="form-control" placeholder="••••••••">
+                </div>
+              </div>
+              <div style="margin-top: 15px;">
+                <button class="btn btn-secondary" id="btn-test-backend" style="padding: 10px 20px;">
+                  <i class="fas fa-plug"></i>
+                  Test Connection
+                </button>
+                <span id="backend-test-result" style="margin-left: 12px; font-size: 0.9rem;"></span>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h3 class="form-section-title"><i class="fas fa-cogs"></i> Auto-Weigh Settings</h3>
+              <div class="form-group">
+                <div class="toggle-wrapper">
+                  <div>
+                    <label>Enable Auto-Weigh</label>
+                    <small style="color: var(--text-secondary);">Automatically submit weight data to backend</small>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="autoweigh-enabled">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="toggle-wrapper">
+                    <div>
+                      <label>Send on Axle Capture</label>
+                      <small style="color: var(--text-secondary);">Mobile: submit when all axles captured</small>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="autoweigh-on-capture" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <div class="toggle-wrapper">
+                    <div>
+                      <label>Send on Vehicle Complete</label>
+                      <small style="color: var(--text-secondary);">Multideck: submit on vehicle complete</small>
+                    </div>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="autoweigh-on-complete" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="autoweigh-retry-attempts">Retry Attempts</label>
+                  <input type="number" id="autoweigh-retry-attempts" class="form-control" value="3" min="0" max="10">
+                </div>
+                <div class="form-group">
+                  <label for="autoweigh-retry-delay">Retry Delay (ms)</label>
+                  <input type="number" id="autoweigh-retry-delay" class="form-control" value="5000" min="1000" max="60000">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance Tab -->
+        <div class="tab-panel" id="appearance-panel">
+          <div class="form-section">
+            <h3 class="form-section-title"><i class="fas fa-palette"></i> Theme</h3>
+            <div class="theme-selector">
+              <div class="theme-option theme-light" data-theme="light">
+                <i class="fas fa-sun" style="font-size: 1.5rem; margin-bottom: 10px;"></i>
+                <br>Light
+              </div>
+              <div class="theme-option theme-dark active" data-theme="dark">
+                <i class="fas fa-moon" style="font-size: 1.5rem; margin-bottom: 10px;"></i>
+                <br>Dark
+              </div>
+              <div class="theme-option theme-system" data-theme="system">
+                <i class="fas fa-desktop" style="font-size: 1.5rem; margin-bottom: 10px;"></i>
+                <br>System
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- About Tab -->
+        <div class="tab-panel" id="about-panel">
+          <div class="form-section about-card">
+            <img src="../assets/logo.png" alt="TruConnect Logo" class="about-logo" onerror="this.style.display='none'">
+            <h2 class="about-title">TruConnect</h2>
+            <p class="about-version">Version 2.0.0</p>
+            <p style="color: var(--text-secondary);">Weighbridge Middleware for TruLoad</p>
+
+            <div class="about-info">
+              <div class="about-info-item">
+                <label>Developer</label>
+                <span>Titus Owuor</span>
+              </div>
+              <div class="about-info-item">
+                <label>Company</label>
+                <span>Covertext IT Solutions</span>
+              </div>
+              <div class="about-info-item">
+                <label>Address</label>
+                <span>Oginga Street, Kisumu</span>
+              </div>
+              <div class="about-info-item">
+                <label>Contact</label>
+                <span>+254743793901</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="settings-footer">
+        <button class="btn btn-secondary" id="btn-reset">
+          <i class="fas fa-undo"></i>
+          Reset to Defaults
+        </button>
+        <button class="btn btn-primary" id="btn-save">
+          <i class="fas fa-save"></i>
+          Save Changes
+        </button>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast">
+    <i class="fas fa-check-circle"></i>
+    <span id="toast-message">Settings saved successfully</span>
+  </div>
+
+  <script>
+    const api = window.electronAPI || {};
+
+    // State
+    let currentSettings = {};
+    let rduCounter = 0;
+
+    // DOM Elements
+    const elements = {
+      sidebarItems: document.querySelectorAll('.sidebar-item'),
+      tabPanels: document.querySelectorAll('.tab-panel'),
+      panelTitle: document.getElementById('panel-title'),
+      modeCards: document.querySelectorAll('.mode-card[data-mode]'),
+      outputCards: document.querySelectorAll('.mode-card[data-output]'),
+      themeOptions: document.querySelectorAll('.theme-option'),
+      inputType: document.getElementById('input-type'),
+      rduList: document.getElementById('rdu-list'),
+      btnAddRdu: document.getElementById('btn-add-rdu'),
+      btnSave: document.getElementById('btn-save'),
+      btnReset: document.getElementById('btn-reset'),
+      btnClose: document.getElementById('btn-close'),
+      toast: document.getElementById('toast'),
+      toastMessage: document.getElementById('toast-message')
+    };
+
+    // Tab navigation
+    elements.sidebarItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const tabId = item.dataset.tab;
+
+        // Update sidebar
+        elements.sidebarItems.forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+
+        // Update panels
+        elements.tabPanels.forEach(panel => {
+          panel.classList.toggle('active', panel.id === `${tabId}-panel`);
+        });
+
+        // Update title
+        const titles = {
+          general: 'General Settings',
+          input: 'Input Sources',
+          output: 'Output Configuration',
+          rdu: 'RDU Displays',
+          thresholds: 'Weight Thresholds',
+          backend: 'Backend Integration',
+          appearance: 'Appearance',
+          about: 'About'
+        };
+        elements.panelTitle.textContent = titles[tabId] || 'Settings';
+      });
+    });
+
+    // Mode selection
+    elements.modeCards.forEach(card => {
+      card.addEventListener('click', () => {
+        elements.modeCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+    });
+
+    // Output mode selection
+    elements.outputCards.forEach(card => {
+      card.addEventListener('click', () => {
+        elements.outputCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+    });
+
+    // Theme selection
+    elements.themeOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        elements.themeOptions.forEach(o => o.classList.remove('active'));
+        option.classList.add('active');
+      });
+    });
+
+    // Active source change - show/hide appropriate config sections
+    const activeSource = document.getElementById('active-source');
+    const pawConfig = document.getElementById('paw-config');
+    const haenniConfig = document.getElementById('haenni-config');
+    const mcgsConfig = document.getElementById('mcgs-config');
+    const indicatorConfig = document.getElementById('indicator-config');
+    const customConfig = document.getElementById('custom-config');
+    const indicatorConnection = document.getElementById('indicator-connection');
+
+    function updateInputSourceUI() {
+      const source = activeSource.value;
+
+      // Hide all config sections
+      pawConfig.style.display = 'none';
+      haenniConfig.style.display = 'none';
+      mcgsConfig.style.display = 'none';
+      indicatorConfig.style.display = 'none';
+      customConfig.style.display = 'none';
+
+      // Show appropriate config
+      if (source === 'paw') {
+        pawConfig.style.display = 'block';
+      } else if (source === 'haenni') {
+        haenniConfig.style.display = 'block';
+      } else if (source === 'mcgs') {
+        mcgsConfig.style.display = 'block';
+      } else if (source.startsWith('indicator_')) {
+        indicatorConfig.style.display = 'block';
+        // Set default query command based on protocol
+        const queryDefaults = {
+          'indicator_zm': 'W',
+          'indicator_cardinal': '',  // Continuous output
+          'indicator_cardinal2': '\x05',  // ENQ
+          'indicator_1310': '\x05'  // ENQ
+        };
+        document.getElementById('indicator-query').value = queryDefaults[source] || 'W';
+      } else if (source === 'custom') {
+        customConfig.style.display = 'block';
+      }
+    }
+
+    activeSource.addEventListener('change', updateInputSourceUI);
+
+    // Indicator connection type change
+    indicatorConnection.addEventListener('change', () => {
+      const connType = indicatorConnection.value;
+      document.getElementById('indicator-serial-settings').style.display = connType === 'serial' ? 'grid' : 'none';
+      document.getElementById('indicator-tcp-settings').style.display = connType === 'tcp' ? 'grid' : 'none';
+    });
+
+    // ============ RDU Configuration ============
+
+    const rduEnabled = document.getElementById('rdu-enabled');
+    const rduConfig = document.getElementById('rdu-config');
+    const rduConnectionType = document.getElementById('rdu-connection-type');
+    const usrConfig = document.getElementById('usr-config');
+    const rduPanelCount = document.getElementById('rdu-panel-count');
+    const panelConfigsContainer = document.getElementById('panel-configs');
+    const rduModel = document.getElementById('rdu-model');
+    const rduFormat = document.getElementById('rdu-format');
+
+    // RDU model formats
+    const RDU_FORMATS = {
+      'KELI': '$={WEIGHT}=',
+      'YAOHUA': 'W{WEIGHT}',
+      'GENERIC': '$={WEIGHT}='
+    };
+
+    // Toggle RDU config visibility
+    rduEnabled.addEventListener('change', () => {
+      rduConfig.style.display = rduEnabled.checked ? 'block' : 'none';
+      if (rduEnabled.checked) {
+        generatePanelConfigs();
+      }
+    });
+
+    // Toggle USR config visibility
+    rduConnectionType.addEventListener('change', () => {
+      usrConfig.style.display = rduConnectionType.value === 'usr' ? 'block' : 'none';
+      generatePanelConfigs();
+    });
+
+    // Update format when model changes
+    rduModel.addEventListener('change', () => {
+      rduFormat.value = RDU_FORMATS[rduModel.value] || RDU_FORMATS['GENERIC'];
+    });
+
+    // Generate panel configs when count changes
+    rduPanelCount.addEventListener('change', generatePanelConfigs);
+
+    function generatePanelConfigs() {
+      const count = parseInt(rduPanelCount.value) || 5;
+      const connectionType = rduConnectionType.value;
+      const panelLabels = ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'GVW'];
+
+      // Map panel count to which panels to show
+      let panelsToShow = [];
+      if (count === 1) panelsToShow = [4]; // GVW only
+      else if (count === 2) panelsToShow = [0, 4]; // Deck 1, GVW
+      else if (count === 4) panelsToShow = [0, 1, 2, 3]; // Deck 1-4
+      else panelsToShow = [0, 1, 2, 3, 4]; // All 5
+
+      let html = '';
+      panelsToShow.forEach((panelIndex, i) => {
+        const label = panelLabels[panelIndex];
+        if (connectionType === 'serial') {
+          html += `
+            <div class="panel-item" data-panel-index="${panelIndex}">
+              <div class="panel-item-header">
+                <span class="panel-item-title">${label} Panel</span>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>COM Port</label>
+                  <input type="text" class="form-control panel-com" placeholder="COM${i + 1}" value="COM${i + 1}">
+                </div>
+                <div class="form-group">
+                  <label>Baud Rate</label>
+                  <select class="form-control panel-baud">
+                    <option value="1200" selected>1200</option>
+                    <option value="2400">2400</option>
+                    <option value="9600">9600</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          `;
+        } else {
+          // USR mode - panels share the USR device connection
+          html += `
+            <div class="panel-item" data-panel-index="${panelIndex}">
+              <div class="panel-item-header">
+                <span class="panel-item-title">${label} Panel</span>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Channel/Port Index</label>
+                  <input type="number" class="form-control panel-channel" value="${i}" min="0" max="7">
+                </div>
+                <div class="form-group">
+                  <label>Baud Rate</label>
+                  <select class="form-control panel-baud">
+                    <option value="1200" selected>1200</option>
+                    <option value="2400">2400</option>
+                    <option value="9600">9600</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      panelConfigsContainer.innerHTML = html;
+    }
+
+    // Get RDU config from form
+    function getRduConfig() {
+      if (!rduEnabled.checked) {
+        return { enabled: false };
+      }
+
+      const panels = [];
+      document.querySelectorAll('.panel-item').forEach(item => {
+        const panelIndex = parseInt(item.dataset.panelIndex);
+        const panel = {
+          deckIndex: panelIndex,
+          baudRate: parseInt(item.querySelector('.panel-baud').value)
+        };
+
+        if (rduConnectionType.value === 'serial') {
+          panel.type = 'serial';
+          panel.port = item.querySelector('.panel-com').value;
+        } else {
+          panel.type = 'usr';
+          panel.channel = parseInt(item.querySelector('.panel-channel').value);
+        }
+
+        panels.push(panel);
+      });
+
+      return {
+        enabled: true,
+        model: rduModel.value,
+        name: document.getElementById('rdu-name').value,
+        connectionType: rduConnectionType.value,
+        format: rduFormat.value,
+        usr: rduConnectionType.value === 'usr' ? {
+          ip: document.getElementById('usr-ip').value,
+          port: parseInt(document.getElementById('usr-port').value) || 4196
+        } : null,
+        panels: panels
+      };
+    }
+
+    // Populate RDU config from settings
+    function populateRduConfig(rdu) {
+      if (!rdu) return;
+
+      rduEnabled.checked = rdu.enabled || false;
+      rduConfig.style.display = rdu.enabled ? 'block' : 'none';
+
+      if (rdu.enabled) {
+        rduModel.value = rdu.model || 'KELI';
+        document.getElementById('rdu-name').value = rdu.name || '';
+        rduConnectionType.value = rdu.connectionType || 'serial';
+        rduFormat.value = rdu.format || RDU_FORMATS[rdu.model] || '$={WEIGHT}=';
+
+        usrConfig.style.display = rdu.connectionType === 'usr' ? 'block' : 'none';
+        if (rdu.usr) {
+          document.getElementById('usr-ip').value = rdu.usr.ip || '';
+          document.getElementById('usr-port').value = rdu.usr.port || 4196;
+        }
+
+        // Set panel count based on number of panels
+        const panelCount = rdu.panels?.length || 5;
+        rduPanelCount.value = panelCount;
+
+        // Generate panel configs then populate
+        generatePanelConfigs();
+
+        // Populate panel values
+        if (rdu.panels) {
+          rdu.panels.forEach(panel => {
+            const item = document.querySelector(`.panel-item[data-panel-index="${panel.deckIndex}"]`);
+            if (item) {
+              item.querySelector('.panel-baud').value = panel.baudRate || 1200;
+              if (panel.type === 'serial') {
+                const comInput = item.querySelector('.panel-com');
+                if (comInput) comInput.value = panel.port || '';
+              } else {
+                const channelInput = item.querySelector('.panel-channel');
+                if (channelInput) channelInput.value = panel.channel || 0;
+              }
+            }
+          });
+        }
+      }
+    }
+
+    // ============ Backend Integration ============
+
+    const backendEnabled = document.getElementById('backend-enabled');
+    const backendConfigDiv = document.getElementById('backend-config');
+    const btnTestBackend = document.getElementById('btn-test-backend');
+    const backendTestResult = document.getElementById('backend-test-result');
+    const backendStatus = document.getElementById('backend-status');
+
+    // Toggle backend config visibility
+    backendEnabled.addEventListener('change', () => {
+      backendConfigDiv.style.display = backendEnabled.checked ? 'block' : 'none';
+    });
+
+    // Test backend connection
+    btnTestBackend.addEventListener('click', async () => {
+      backendTestResult.textContent = 'Testing...';
+      backendTestResult.style.color = 'var(--primary)';
+      backendStatus.className = 'status-bubble connecting';
+
+      const connectionError = document.getElementById('backend-connection-error');
+      connectionError.classList.remove('show');
+
+      try {
+        if (api.testBackendConnection) {
+          const result = await api.testBackendConnection({
+            baseUrl: document.getElementById('backend-url').value,
+            authEndpoint: document.getElementById('backend-auth-endpoint').value,
+            email: document.getElementById('backend-email').value,
+            password: document.getElementById('backend-password').value
+          });
+
+          if (result.success) {
+            backendTestResult.textContent = 'Connected & authenticated';
+            backendTestResult.style.color = 'var(--success)';
+            backendStatus.className = 'status-bubble connected';
+          } else {
+            backendTestResult.textContent = result.error || 'Connection failed';
+            backendTestResult.style.color = 'var(--danger)';
+            backendStatus.className = 'status-bubble disconnected';
+            document.getElementById('backend-error-text').textContent = result.error;
+            connectionError.classList.add('show');
+          }
+        } else {
+          backendTestResult.textContent = 'Test unavailable (dev mode)';
+          backendTestResult.style.color = 'var(--text-secondary)';
+        }
+      } catch (error) {
+        backendTestResult.textContent = 'Error: ' + error.message;
+        backendTestResult.style.color = 'var(--danger)';
+        backendStatus.className = 'status-bubble disconnected';
+      }
+    });
+
+    // Get backend config from form
+    function getBackendConfig() {
+      return {
+        enabled: backendEnabled.checked,
+        baseUrl: document.getElementById('backend-url').value,
+        authEndpoint: document.getElementById('backend-auth-endpoint').value,
+        autoweighEndpoint: document.getElementById('backend-autoweigh-endpoint').value,
+        email: document.getElementById('backend-email').value,
+        password: document.getElementById('backend-password').value
+      };
+    }
+
+    // Get autoweigh config from form
+    function getAutoweighConfig() {
+      return {
+        enabled: document.getElementById('autoweigh-enabled').checked,
+        sendOnCapture: document.getElementById('autoweigh-on-capture').checked,
+        sendOnVehicleComplete: document.getElementById('autoweigh-on-complete').checked,
+        retryAttempts: parseInt(document.getElementById('autoweigh-retry-attempts').value) || 3,
+        retryDelayMs: parseInt(document.getElementById('autoweigh-retry-delay').value) || 5000
+      };
+    }
+
+    // Populate backend config from settings
+    function populateBackendConfig(backend, autoWeigh) {
+      if (backend) {
+        backendEnabled.checked = backend.enabled || false;
+        backendConfigDiv.style.display = backend.enabled ? 'block' : 'none';
+        document.getElementById('backend-url').value = backend.baseUrl || '';
+        document.getElementById('backend-auth-endpoint').value = backend.authEndpoint || '/api/v1/auth/login';
+        document.getElementById('backend-autoweigh-endpoint').value = backend.autoweighEndpoint || '/api/v1/weighing-transactions/autoweigh';
+        document.getElementById('backend-email').value = backend.email || '';
+        document.getElementById('backend-password').value = backend.password || '';
+      }
+
+      if (autoWeigh) {
+        document.getElementById('autoweigh-enabled').checked = autoWeigh.enabled || false;
+        document.getElementById('autoweigh-on-capture').checked = autoWeigh.sendOnCapture !== false;
+        document.getElementById('autoweigh-on-complete').checked = autoWeigh.sendOnVehicleComplete !== false;
+        document.getElementById('autoweigh-retry-attempts').value = autoWeigh.retryAttempts || 3;
+        document.getElementById('autoweigh-retry-delay').value = autoWeigh.retryDelayMs || 5000;
+      }
+    }
+
+    // ============ Output URL Display ============
+
+    const wsPort = document.getElementById('ws-port');
+    const apiPort = document.getElementById('api-server-port');
+    const wsUrl = document.getElementById('ws-url');
+    const apiUrlDisplay = document.getElementById('api-url-display');
+    const wsStatus = document.getElementById('ws-status');
+    const apiStatus = document.getElementById('api-status');
+
+    function updateUrlDisplays() {
+      const hostname = window.location.hostname || 'localhost';
+      wsUrl.textContent = `ws://${hostname}:${wsPort.value || 3030}`;
+      apiUrlDisplay.textContent = `http://${hostname}:${apiPort.value || 3031}/weights`;
+    }
+
+    wsPort.addEventListener('input', updateUrlDisplays);
+    apiPort.addEventListener('input', updateUrlDisplays);
+
+    // Update connection status indicators
+    function updateConnectionStatus(wsConnected, apiEnabled) {
+      // WebSocket status
+      if (wsConnected === true) {
+        wsStatus.className = 'status-bubble connected';
+        wsStatus.title = 'Connected';
+      } else if (wsConnected === 'connecting') {
+        wsStatus.className = 'status-bubble connecting';
+        wsStatus.title = 'Connecting...';
+      } else {
+        wsStatus.className = 'status-bubble disconnected';
+        wsStatus.title = 'Disconnected';
+      }
+
+      // API status (only show if enabled)
+      const outputMode = document.querySelector('.mode-card[data-output].active')?.dataset.output;
+      if (outputMode === 'polling' && apiEnabled) {
+        apiStatus.className = 'status-bubble connected';
+        apiStatus.title = 'Active';
+      } else {
+        apiStatus.className = 'status-bubble disabled';
+        apiStatus.title = 'Disabled';
+      }
+    }
+
+    // Output mode change - update status
+    elements.outputCards.forEach(card => {
+      card.addEventListener('click', () => {
+        elements.outputCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        updateConnectionStatus(true, card.dataset.output === 'polling');
+      });
+    });
+
+    // Show toast
+    function showToast(message, type = 'success') {
+      elements.toastMessage.textContent = message;
+      elements.toast.className = `toast ${type} show`;
+
+      setTimeout(() => {
+        elements.toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // Get input configuration based on selected source
+    function getInputConfig() {
+      const source = document.getElementById('active-source').value;
+
+      const config = {
+        activeSource: source
+      };
+
+      if (source === 'paw') {
+        config.paw = {
+          enabled: true,
+          type: 'serial',
+          protocol: 'PAW',
+          serial: {
+            port: document.getElementById('paw-port').value || 'COM7',
+            baudRate: parseInt(document.getElementById('paw-baud').value) || 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            queryCommand: document.getElementById('paw-query').value || 'W'
+          }
+        };
+      } else if (source === 'haenni') {
+        config.haenni = {
+          enabled: true,
+          type: 'api',
+          protocol: 'HAENNI',
+          api: {
+            url: document.getElementById('haenni-url').value || 'http://localhost:8888/devices/measurements',
+            interval: parseInt(document.getElementById('haenni-interval').value) || 500,
+            method: 'GET'
+          }
+        };
+      } else if (source === 'mcgs') {
+        const weighCmd = document.getElementById('mcgs-cmd-weigh').value.trim();
+        const zeroCmd = document.getElementById('mcgs-cmd-zero').value.trim();
+        const stopCmd = document.getElementById('mcgs-cmd-stop').value.trim();
+        config.mcgs = {
+          enabled: true,
+          type: 'serial',
+          protocol: 'MCGS',
+          serial: {
+            port: document.getElementById('mcgs-port').value || 'COM3',
+            baudRate: parseInt(document.getElementById('mcgs-baud').value) || 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            queryCommand: '',
+            commands: {
+              weigh: weighCmd || '\\x02A\\x03',
+              zero: zeroCmd || '\\x02D\\x03',
+              stop: stopCmd || 'STOP\\r\\n'
+            }
+          }
+        };
+      } else if (source.startsWith('indicator_') || source === 'custom') {
+        const connectionType = document.getElementById('indicator-connection').value;
+        const sourceKey = source === 'custom' ? 'custom' : source;
+
+        config[sourceKey] = {
+          enabled: true,
+          type: connectionType,
+          protocol: source.replace('indicator_', '').toUpperCase(),
+          connectionType: connectionType,
+          serial: {
+            port: document.getElementById('indicator-port').value || 'COM1',
+            baudRate: parseInt(document.getElementById('indicator-baud').value) || 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            queryCommand: document.getElementById('indicator-query').value || 'W'
+          },
+          tcp: {
+            host: document.getElementById('indicator-tcp-host').value || '192.168.1.100',
+            port: parseInt(document.getElementById('indicator-tcp-port').value) || 4001
+          }
+        };
+      }
+
+      return config;
+    }
+
+    // Save settings
+    async function saveSettings() {
+      const captureMode = document.querySelector('.mode-card[data-mode].active')?.dataset.mode || 'mobile';
+      const stableTolerance = parseInt(document.getElementById('stable-tolerance').value) || 50;
+      const inputConfig = getInputConfig();
+
+      // Enable simulation when "None (Simulation Mode)" is selected
+      const simulationEnabled = inputConfig.activeSource === 'none';
+
+      const settings = {
+        station: {
+          name: document.getElementById('station-name').value,
+          code: document.getElementById('station-code').value,
+          bidirectional: document.getElementById('bidirectional').checked
+        },
+        app: {
+          captureMode: captureMode,
+          theme: document.querySelector('.theme-option.active')?.dataset.theme || 'dark'
+        },
+        simulation: {
+          enabled: simulationEnabled,
+          mode: 'dynamic',  // Use dynamic mode for varying weights
+          staticWeight: 9000,
+          minWeight: 6500,
+          maxWeight: 12000,
+          updateInterval: 1000,
+          pattern: captureMode  // Use current capture mode for simulation pattern
+        },
+        input: inputConfig,
+        output: {
+          mode: document.querySelector('.mode-card[data-output].active')?.dataset.output || 'realtime',
+          websocket: {
+            enabled: true,
+            port: parseInt(document.getElementById('ws-port').value) || 3030
+          },
+          api: {
+            enabled: document.querySelector('.mode-card[data-output].active')?.dataset.output === 'polling',
+            port: parseInt(document.getElementById('api-server-port').value) || 3031
+          }
+        },
+        thresholds: {
+          multideck: {
+            minWeight: parseInt(document.getElementById('min-weight').value) || 200,
+            maxWeight: parseInt(document.getElementById('max-weight').value) || 100000,
+            vehicleDetection: parseInt(document.getElementById('vehicle-detection').value) || 500,
+            stableTolerance: stableTolerance,
+            motionTimeout: 5000
+          },
+          mobile: {
+            minAxleWeight: parseInt(document.getElementById('min-weight').value) || 200,
+            maxAxleWeight: 20000,
+            maxGvw: parseInt(document.getElementById('max-weight').value) || 100000,
+            stableTolerance: stableTolerance,
+            motionTimeout: 3000
+          }
+        },
+        mobileMode: {
+          maxAxles: parseInt(document.getElementById('max-axles').value) || 12,
+          axlePromptTimeout: parseInt(document.getElementById('axle-prompt-timeout').value) || 5000,
+          requireStableReading: document.getElementById('require-stable').checked
+        },
+        rdu: getRduConfig(),
+        backend: getBackendConfig(),
+        autoWeigh: getAutoweighConfig()
+      };
+
+      console.log('Saving settings:', settings);
+
+      try {
+        if (api.saveSettings) {
+          const result = await api.saveSettings(settings);
+          if (result.success) {
+            showToast('Settings saved successfully');
+          } else {
+            showToast(result.error || 'Failed to save settings', 'error');
+          }
+        } else {
+          console.log('Settings to save:', settings);
+          showToast('Settings saved (dev mode)');
+        }
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        showToast('Error saving settings', 'error');
+      }
+    }
+
+    // Load settings
+    async function loadSettings() {
+      try {
+        if (api.getSettings) {
+          const settings = await api.getSettings();
+          populateForm(settings);
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    }
+
+    // Populate form with settings
+    function populateForm(settings) {
+      if (!settings) return;
+
+      console.log('Populating form with settings:', settings);
+
+      // Station
+      if (settings.station) {
+        document.getElementById('station-name').value = settings.station.name || '';
+        document.getElementById('station-code').value = settings.station.code || '';
+        document.getElementById('bidirectional').checked = settings.station.bidirectional || false;
+      }
+
+      // Capture mode
+      if (settings.app?.captureMode) {
+        elements.modeCards.forEach(card => {
+          card.classList.toggle('active', card.dataset.mode === settings.app.captureMode);
+        });
+      }
+
+      // Theme
+      if (settings.app?.theme) {
+        elements.themeOptions.forEach(opt => {
+          opt.classList.toggle('active', opt.dataset.theme === settings.app.theme);
+        });
+      }
+
+      // Input - handle new input source configuration
+      if (settings.input) {
+        const source = settings.input.activeSource || 'none';
+        document.getElementById('active-source').value = source;
+
+        // Populate PAW config
+        if (settings.input.paw) {
+          const paw = settings.input.paw;
+          document.getElementById('paw-port').value = paw.serial?.port || 'COM7';
+          document.getElementById('paw-baud').value = paw.serial?.baudRate || 9600;
+          document.getElementById('paw-query').value = paw.serial?.queryCommand || 'W';
+        }
+
+        // Populate Haenni config
+        if (settings.input.haenni) {
+          const haenni = settings.input.haenni;
+          document.getElementById('haenni-url').value = haenni.api?.url || 'http://localhost:8888/devices/measurements';
+          document.getElementById('haenni-interval').value = haenni.api?.interval || 500;
+        }
+
+        // Populate MCGS config
+        if (settings.input.mcgs) {
+          const mcgs = settings.input.mcgs;
+          const cmds = mcgs.serial?.commands;
+          document.getElementById('mcgs-port').value = mcgs.serial?.port || 'COM3';
+          document.getElementById('mcgs-baud').value = mcgs.serial?.baudRate || 9600;
+          document.getElementById('mcgs-cmd-weigh').value = cmds?.weigh || '';
+          document.getElementById('mcgs-cmd-zero').value = cmds?.zero || '';
+          document.getElementById('mcgs-cmd-stop').value = cmds?.stop || '';
+        }
+
+        // Populate indicator config (for any indicator_* source)
+        const indicatorSources = ['indicator_zm', 'indicator_cardinal', 'indicator_cardinal2', 'indicator_1310', 'custom'];
+        for (const src of indicatorSources) {
+          if (settings.input[src]) {
+            const indicator = settings.input[src];
+            document.getElementById('indicator-connection').value = indicator.connectionType || indicator.type || 'serial';
+            document.getElementById('indicator-query').value = indicator.serial?.queryCommand || '';
+            document.getElementById('indicator-port').value = indicator.serial?.port || 'COM1';
+            document.getElementById('indicator-baud').value = indicator.serial?.baudRate || 9600;
+            document.getElementById('indicator-tcp-host').value = indicator.tcp?.host || '';
+            document.getElementById('indicator-tcp-port').value = indicator.tcp?.port || 4001;
+            break;
+          }
+        }
+
+        // Update UI visibility
+        updateInputSourceUI();
+
+        // Also update indicator connection type UI
+        const connType = document.getElementById('indicator-connection').value;
+        document.getElementById('indicator-serial-settings').style.display = connType === 'serial' ? 'grid' : 'none';
+        document.getElementById('indicator-tcp-settings').style.display = connType === 'tcp' ? 'grid' : 'none';
+      }
+
+      // Output - default WebSocket port is 3030
+      if (settings.output) {
+        elements.outputCards.forEach(card => {
+          card.classList.toggle('active', card.dataset.output === settings.output.mode);
+        });
+        document.getElementById('ws-port').value = settings.output.websocket?.port || 3030;
+        document.getElementById('api-server-port').value = settings.output.api?.port || 3031;
+      }
+
+      // Thresholds - handle both thresholds.multideck.* and thresholds.* structures
+      if (settings.thresholds) {
+        const thresholds = settings.thresholds.multideck || settings.thresholds;
+        document.getElementById('min-weight').value = thresholds.minWeight || 200;
+        document.getElementById('max-weight').value = thresholds.maxWeight || 100000;
+        document.getElementById('vehicle-detection').value = thresholds.vehicleDetection || 500;
+        document.getElementById('stable-tolerance').value = thresholds.stableTolerance || 50;
+      }
+
+      // Mobile mode
+      if (settings.mobileMode) {
+        document.getElementById('max-axles').value = settings.mobileMode.maxAxles || 12;
+        document.getElementById('axle-prompt-timeout').value = settings.mobileMode.axlePromptTimeout || 5000;
+        document.getElementById('require-stable').checked = settings.mobileMode.requireStableReading !== false;
+      }
+
+      // RDU configuration (new format)
+      if (settings.rdu) {
+        populateRduConfig(settings.rdu);
+      }
+
+      // Backend integration
+      populateBackendConfig(settings.backend, settings.autoWeigh);
+
+      // Update URL displays and connection status
+      updateUrlDisplays();
+      updateConnectionStatus(true, settings.output?.mode === 'polling');
+    }
+
+    // Event listeners
+    elements.btnSave.addEventListener('click', saveSettings);
+
+    elements.btnReset.addEventListener('click', () => {
+      if (confirm('Reset all settings to defaults?')) {
+        // Would call api.resetSettings() and reload
+        showToast('Settings reset to defaults');
+      }
+    });
+
+    elements.btnClose.addEventListener('click', () => {
+      window.close();
+    });
+
+    // Apply navigation restrictions for operator
+    async function applyRestrictions() {
+      try {
+        if (api.checkSession) {
+          const authResult = await api.checkSession();
+          if (authResult.authenticated && authResult.user?.email === 'user@truconnect.com') {
+            const allowedTabs = ['general', 'input', 'output'];
+            elements.sidebarItems.forEach(item => {
+              if (!allowedTabs.includes(item.dataset.tab)) {
+                item.style.display = 'none';
+              }
+            });
+            console.log('Operator restrictions applied to settings sidebar');
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to apply operator restrictions:', error);
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSettings();
+      updateUrlDisplays();
+      generatePanelConfigs();
+      applyRestrictions();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruConnect - Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    :root {
+      --primary: #D4AF37;
+      --primary-dark: #B8860B;
+      --primary-light: #FFD700;
+      --secondary: #800020;
+      --secondary-dark: #5E1914;
+      --dark: #121212;
+      --darker: #0a0a0a;
+      --card-bg: #1e1e1e;
+      --text: #f5f5f5;
+      --text-secondary: #b0b0b0;
+      --border: #333;
+      --success: #4CAF50;
+      --danger: #f44336;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, var(--dark) 0%, var(--darker) 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.5));
+      margin-bottom: 20px;
+    }
+
+    .login-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .login-header p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .station-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      padding: 8px 16px;
+      margin-top: 15px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--primary);
+      letter-spacing: 0.5px;
+    }
+
+    .station-badge i {
+      color: var(--primary-light);
+    }
+
+    .login-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 35px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: 500;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .input-group {
+      position: relative;
+    }
+
+    .input-group i {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 14px 15px 14px 45px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .form-control::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 5px;
+      transition: color 0.2s ease;
+    }
+
+    .password-toggle:hover {
+      color: var(--primary);
+    }
+
+    .form-options {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+    }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .remember-me input {
+      display: none;
+    }
+
+    .checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .remember-me input:checked + .checkbox {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .checkbox i {
+      color: #000;
+      font-size: 0.7rem;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .remember-me input:checked + .checkbox i {
+      opacity: 1;
+    }
+
+    .forgot-password {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s ease;
+    }
+
+    .forgot-password:hover {
+      color: var(--primary-light);
+      text-decoration: underline;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border: none;
+      border-radius: 10px;
+      color: #000;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(212, 175, 55, 0.4);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-login .spinner {
+      display: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 0, 0, 0.2);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .btn-login.loading .spinner {
+      display: block;
+    }
+
+    .btn-login.loading .btn-text {
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-message {
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      border-radius: 8px;
+      padding: 12px 15px;
+      margin-bottom: 20px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      color: var(--danger);
+      font-size: 0.9rem;
+    }
+
+    .error-message.show {
+      display: flex;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 25px 0;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .divider span {
+      padding: 0 15px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .login-footer p {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+    }
+
+    .login-footer .company {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .version-badge {
+      display: inline-block;
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      color: var(--primary);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      margin-top: 10px;
+    }
+
+    /* Animations */
+    .login-card {
+      animation: slideUp 0.5s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Background decoration */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image:
+        radial-gradient(circle at 20% 80%, rgba(212, 175, 55, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(128, 0, 32, 0.05) 0%, transparent 50%);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <img src="../assets/logo.png" alt="TruConnect Logo" class="logo" onerror="this.style.display='none'">
+      <h1>TruConnect</h1>
+      <p>Weighbridge Middleware for TruLoad</p>
+      <div class="station-badge" id="station-badge">
+        <i class="fas fa-map-marker-alt"></i>
+        <span id="station-display">Loading...</span>
+      </div>
+    </div>
+
+    <div class="login-card">
+      <div class="error-message" id="error-message">
+        <i class="fas fa-exclamation-circle"></i>
+        <span id="error-text">Invalid email or password</span>
+      </div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <div class="input-group">
+            <i class="fas fa-envelope"></i>
+            <input
+              type="email"
+              id="email"
+              class="form-control"
+              placeholder="Enter your email"
+              required
+              autocomplete="email"
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-group">
+            <i class="fas fa-lock"></i>
+            <input
+              type="password"
+              id="password"
+              class="form-control"
+              placeholder="Enter your password"
+              required
+              autocomplete="current-password"
+            >
+            <button type="button" class="password-toggle" id="password-toggle">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-options">
+          <label class="remember-me">
+            <input type="checkbox" id="remember-me">
+            <span class="checkbox"><i class="fas fa-check"></i></span>
+            <span>Remember me</span>
+          </label>
+          <a href="#" class="forgot-password" id="forgot-password">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn-login" id="btn-login">
+          <span class="btn-text">Sign In</span>
+          <span class="spinner"></span>
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <p>Developed by <span class="company">Covertext IT Solutions</span></p>
+        <p>Oginga Street, Kisumu | +254743793901</p>
+        <span class="version-badge">v2.1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Access electronAPI exposed through contextBridge
+    const api = window.electronAPI || {};
+
+    // DOM Elements
+    const loginForm = document.getElementById('login-form');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const rememberMeCheckbox = document.getElementById('remember-me');
+    const passwordToggle = document.getElementById('password-toggle');
+    const btnLogin = document.getElementById('btn-login');
+    const errorMessage = document.getElementById('error-message');
+    const errorText = document.getElementById('error-text');
+    const stationDisplay = document.getElementById('station-display');
+    const stationBadge = document.getElementById('station-badge');
+
+    // Load and display station info
+    async function loadStationInfo() {
+      try {
+        if (api.getInitialData) {
+          const data = await api.getInitialData();
+          const stationCode = data.stationCode || '';
+          const stationName = data.stationName || 'TruConnect Station';
+
+          if (stationDisplay) {
+            if (stationCode) {
+              stationDisplay.textContent = `${stationCode} - ${stationName}`;
+            } else {
+              stationDisplay.textContent = stationName;
+            }
+          }
+        } else {
+          // Fallback if API not available
+          if (stationDisplay) {
+            stationDisplay.textContent = 'TruConnect Station';
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load station info:', error);
+        if (stationDisplay) {
+          stationDisplay.textContent = 'TruConnect Station';
+        }
+      }
+    }
+
+    // Load station info on page load
+    loadStationInfo();
+
+    // Toggle password visibility
+    passwordToggle.addEventListener('click', () => {
+      const type = passwordInput.type === 'password' ? 'text' : 'password';
+      passwordInput.type = type;
+
+      const icon = passwordToggle.querySelector('i');
+      icon.classList.toggle('fa-eye');
+      icon.classList.toggle('fa-eye-slash');
+    });
+
+    // Show error message
+    function showError(message) {
+      errorText.textContent = message;
+      errorMessage.classList.add('show');
+    }
+
+    // Hide error message
+    function hideError() {
+      errorMessage.classList.remove('show');
+    }
+
+    // Set loading state
+    function setLoading(loading) {
+      btnLogin.disabled = loading;
+      btnLogin.classList.toggle('loading', loading);
+    }
+
+    // Handle form submission
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hideError();
+
+      // Store current values to preserve them
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      const rememberMe = rememberMeCheckbox.checked;
+
+      if (!email || !password) {
+        showError('Please enter both email and password');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        if (api.login) {
+          const result = await api.login({ email, password, rememberMe });
+
+          if (result.success) {
+            console.log('Login successful, redirecting to dashboard...');
+            // Navigate to dashboard
+            window.location.href = 'index.html';
+          } else {
+            // Show specific error message from server - DO NOT clear fields
+            const errorMsg = result.error || 'Invalid email or password';
+            console.log('Login failed:', errorMsg);
+            showError(errorMsg);
+            // Ensure fields are preserved
+            emailInput.value = email;
+            passwordInput.value = password;
+            // Focus password field for retry
+            passwordInput.select();
+          }
+        } else {
+          // Fallback for development/testing
+          console.warn('api.login not available');
+
+          // Check against default admin for testing
+          if (email === 'admin@codevertexitsolutions.com' && password === 'Admin@123!') {
+            console.log('Dev mode: Login successful');
+            showError('Login API not available - running in dev mode');
+          } else {
+            showError('Invalid email or password');
+            // Preserve fields
+            emailInput.value = email;
+            passwordInput.value = password;
+            passwordInput.select();
+          }
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        showError(error.message || 'An error occurred. Please try again.');
+        // Preserve fields on error
+        emailInput.value = email;
+        passwordInput.value = password;
+        passwordInput.select();
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // Handle forgot password
+    document.getElementById('forgot-password').addEventListener('click', (e) => {
+      e.preventDefault();
+      alert('Please contact your system administrator to reset your password.');
+    });
+
+    // Default admin email for convenience (password not stored for security)
+    const DEFAULT_ADMIN_EMAIL = 'admin@codevertexitsolutions.com';
+
+    // Load saved email if remember me was used, otherwise prepopulate admin email
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        if (api.getSavedCredentials) {
+          const saved = await api.getSavedCredentials();
+          if (saved && saved.email) {
+            emailInput.value = saved.email;
+            rememberMeCheckbox.checked = true;
+            passwordInput.focus();
+          } else {
+            // Prepopulate with admin email for convenience
+            emailInput.value = DEFAULT_ADMIN_EMAIL;
+            passwordInput.focus();
+          }
+        } else {
+          // Fallback: prepopulate with admin email
+          emailInput.value = DEFAULT_ADMIN_EMAIL;
+          passwordInput.focus();
+        }
+      } catch (error) {
+        console.error('Error loading saved credentials:', error);
+        // Still prepopulate admin email on error
+        emailInput.value = DEFAULT_ADMIN_EMAIL;
+        passwordInput.focus();
+      }
+    });
+
+    // Handle Enter key
+    emailInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        passwordInput.focus();
+      }
+    });
+
+    passwordInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loginForm.requestSubmit();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruConnect - Activity Log</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    :root {
+      --primary: #D4AF37;
+      --primary-dark: #B8860B;
+      --bg: #121212;
+      --darker: #0a0a0a;
+      --card-bg: #1e1e1e;
+      --text: #f5f5f5;
+      --text-secondary: #b0b0b0;
+      --border: #333;
+      --success: #4CAF50;
+      --danger: #f44336;
+      --warning: #FFC107;
+      --info: #2196F3;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .page-wrapper {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .page-header h1 {
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-header h1 i { color: var(--primary); }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-back {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-back:hover { background: rgba(255,255,255,0.1); }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(212, 175, 55, 0.1);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .filters {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-group label {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .filter-group select,
+    .filter-group input {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card-bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .filter-group select:focus,
+    .filter-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .log-table th,
+    .log-table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-table th {
+      background: var(--darker);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+
+    .log-table tr:hover {
+      background: rgba(212, 175, 55, 0.05);
+    }
+
+    .log-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .log-level {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .log-level.info {
+      background: rgba(33, 150, 243, 0.1);
+      color: var(--info);
+    }
+
+    .log-level.warning {
+      background: rgba(255, 193, 7, 0.1);
+      color: var(--warning);
+    }
+
+    .log-level.error {
+      background: rgba(244, 67, 54, 0.1);
+      color: var(--danger);
+    }
+
+    .log-level.success {
+      background: rgba(76, 175, 80, 0.1);
+      color: var(--success);
+    }
+
+    .timestamp {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .pagination button {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .pagination button:hover:not(:disabled) {
+      background: rgba(212, 175, 55, 0.1);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination span {
+      color: var(--text-secondary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state i {
+      font-size: 4rem;
+      color: var(--border);
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <header class="page-header">
+      <h1><i class="fas fa-list-alt"></i> Activity Log</h1>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="exportLogs()">
+          <i class="fas fa-download"></i> Export
+        </button>
+        <button class="btn btn-secondary" onclick="clearLogs()">
+          <i class="fas fa-trash"></i> Clear
+        </button>
+        <button class="btn btn-back" onclick="window.location.href='index.html'">
+          <i class="fas fa-arrow-left"></i> Back
+        </button>
+      </div>
+    </header>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label>Level:</label>
+        <select id="filter-level" onchange="filterLogs()">
+          <option value="all">All</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+          <option value="success">Success</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>From:</label>
+        <input type="date" id="filter-from" onchange="filterLogs()">
+      </div>
+      <div class="filter-group">
+        <label>To:</label>
+        <input type="date" id="filter-to" onchange="filterLogs()">
+      </div>
+      <div class="filter-group">
+        <label>Search:</label>
+        <input type="text" id="filter-search" placeholder="Search logs..." oninput="filterLogs()">
+      </div>
+    </div>
+
+    <table class="log-table" id="log-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Level</th>
+          <th>Source</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody id="log-body">
+        <!-- Logs will be inserted here -->
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      <button id="btn-prev" onclick="prevPage()" disabled>
+        <i class="fas fa-chevron-left"></i> Previous
+      </button>
+      <span id="page-info">Page 1 of 1</span>
+      <button id="btn-next" onclick="nextPage()" disabled>
+        Next <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Sample log data
+    const logs = [
+      { timestamp: '2026-01-28 10:30:15', level: 'info', source: 'System', message: 'TruConnect started successfully' },
+      { timestamp: '2026-01-28 10:30:16', level: 'info', source: 'Database', message: 'Database connection established' },
+      { timestamp: '2026-01-28 10:30:17', level: 'warning', source: 'Indicator', message: 'No serial ports detected' },
+      { timestamp: '2026-01-28 10:30:18', level: 'error', source: 'API', message: 'Failed to connect to weight API: timeout' },
+      { timestamp: '2026-01-28 10:30:20', level: 'info', source: 'WebSocket', message: 'WebSocket server started on port 8080' },
+      { timestamp: '2026-01-28 10:31:00', level: 'success', source: 'RDU', message: 'RDU Display 1 connected on COM4' },
+      { timestamp: '2026-01-28 10:32:00', level: 'info', source: 'Weights', message: 'Weight monitoring started (500ms interval)' },
+    ];
+
+    let currentPage = 1;
+    const logsPerPage = 20;
+    let filteredLogs = [...logs];
+
+    function renderLogs() {
+      const tbody = document.getElementById('log-body');
+      const start = (currentPage - 1) * logsPerPage;
+      const end = start + logsPerPage;
+      const pageLogs = filteredLogs.slice(start, end);
+
+      if (pageLogs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 40px;">
+              No logs found
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = pageLogs.map(log => `
+        <tr>
+          <td class="timestamp">${log.timestamp}</td>
+          <td><span class="log-level ${log.level}">${log.level.toUpperCase()}</span></td>
+          <td>${log.source}</td>
+          <td>${log.message}</td>
+        </tr>
+      `).join('');
+
+      updatePagination();
+    }
+
+    function updatePagination() {
+      const totalPages = Math.ceil(filteredLogs.length / logsPerPage) || 1;
+      document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
+      document.getElementById('btn-prev').disabled = currentPage === 1;
+      document.getElementById('btn-next').disabled = currentPage >= totalPages;
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderLogs();
+      }
+    }
+
+    function nextPage() {
+      const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderLogs();
+      }
+    }
+
+    function filterLogs() {
+      const level = document.getElementById('filter-level').value;
+      const search = document.getElementById('filter-search').value.toLowerCase();
+
+      filteredLogs = logs.filter(log => {
+        if (level !== 'all' && log.level !== level) return false;
+        if (search && !log.message.toLowerCase().includes(search) &&
+            !log.source.toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      currentPage = 1;
+      renderLogs();
+    }
+
+    function exportLogs() {
+      const csv = 'Timestamp,Level,Source,Message\n' +
+        filteredLogs.map(l => `"${l.timestamp}","${l.level}","${l.source}","${l.message}"`).join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'truconnect-logs.csv';
+      a.click();
+    }
+
+    function clearLogs() {
+      if (confirm('Are you sure you want to clear all logs?')) {
+        alert('Logs cleared (demo only)');
+      }
+    }
+
+    // Initialize
+    renderLogs();
+  </script>
+</body>
+</html>

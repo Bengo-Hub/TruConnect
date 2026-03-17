@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="g" x1="36" y1="28" x2="220" y2="228" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD700"/>
+      <stop offset="0.55" stop-color="#D4AF37"/>
+      <stop offset="1" stop-color="#800020"/>
+    </linearGradient>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Dark rounded tile -->
+  <rect x="20" y="20" width="216" height="216" rx="54" fill="#0B0B0B"/>
+  <rect x="20" y="20" width="216" height="216" rx="54" stroke="#232323" stroke-width="2"/>
+
+  <!-- Stylized "T" built from signal + beam -->
+  <g filter="url(#s)">
+    <!-- mast -->
+    <rect x="119" y="70" width="18" height="116" rx="9" fill="url(#g)"/>
+    <!-- beam -->
+    <rect x="74" y="70" width="108" height="18" rx="9" fill="url(#g)"/>
+
+    <!-- signal arcs -->
+    <path d="M86 130c0-23 19-42 42-42" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M170 130c0-23-19-42-42-42" stroke="url(#g)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M98 138c0-16 14-30 30-30" stroke="#FFD700" stroke-opacity="0.85" stroke-width="8" stroke-linecap="round"/>
+    <path d="M158 138c0-16-14-30-30-30" stroke="#FFD700" stroke-opacity="0.85" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- small dot to evoke "connect" -->
+  <circle cx="128" cy="188" r="10" fill="#FFD700"/>
+</svg>
+
