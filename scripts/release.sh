@@ -29,7 +29,7 @@ git add package.json package-lock.json
 # Commit changes
 git config user.name "${GIT_USER:-TruLoad Bot}"
 git config user.email "${GIT_EMAIL:-dev@truload.io}"
-git commit -m "chore(release): bump version to $NEW_VERSION"
+git commit -m "chore(release): bump version to $NEW_VERSION [skip ci]"
 
 # Handle git push with token if in CI
 if [ -n "$GH_PAT" ]; then
@@ -39,7 +39,9 @@ fi
 
 # Create and push tag
 git tag -a "$NEW_VERSION" -m "TruConnect Release $NEW_VERSION"
-git push origin main --follow-tags
+# Push current branch (main or master) to avoid branch mismatch and re-trigger on same branch
+CURRENT_BRANCH="${GITHUB_REF_NAME:-$(git symbolic-ref --short HEAD)}"
+git push origin "$CURRENT_BRANCH" --follow-tags
 
-echo "Successfully bumped to $NEW_VERSION and pushed tags to main branch."
+echo "Successfully bumped to $NEW_VERSION and pushed tags to $CURRENT_BRANCH."
 echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV

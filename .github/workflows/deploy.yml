@@ -1,8 +1,11 @@
+# TruConnect: build and release. Avoids loop by skipping when the triggering
+# commit is the automated "chore(release): bump version" (that commit is created
+# by the release script and would re-trigger the workflow).
 name: Build and Release TruConnect
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 permissions:
@@ -11,6 +14,12 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    # Skip entire job on push when this run was triggered by our own bump commit (stops the loop)
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'push' && 
+       !contains(github.event.head_commit.message, '[skip ci]') && 
+       !contains(github.event.head_commit.message, 'chore(release)'))
 
     steps:
     - name: Checkout code
@@ -29,8 +38,13 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    # Only bump version on push from a human (or other) commit; never when already a bump commit
     - name: Run release script (automated versioning)
-      if: "${{ github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'chore(release): bump version') }}"
+      if: |
+        github.event_name == 'workflow_dispatch' || 
+        (github.event_name == 'push' && 
+         !contains(github.event.head_commit.message, '[skip ci]') && 
+         !contains(github.event.head_commit.message, 'chore(release)'))
       shell: bash
       env:
         GH_PAT: ${{ secrets.GH_PAT }}
@@ -41,8 +55,6 @@ jobs:
         ./scripts/release.sh patch
 
     - name: Build/release Electron app
-      if: "${{ !contains(github.event.head_commit.message, 'chore(release): bump version') }}"
       env:
         GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-      # This will build and publish the release to GitHub
       run: npm run build:publish
