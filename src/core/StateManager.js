@@ -518,14 +518,47 @@ class StateManager {
 
   /**
    * Add captured axle weight (mobile mode)
-   * @param {number} weight - Axle weight in kg
+   * 
+   * IMPORTANT: Stores the weight directly without re-applying cumulative logic.
+   * The cumulative weight logic should be applied ONCE at setCurrentMobileWeight(),
+   * and the handlers should pass currentMobileWeight directly to this method.
+   * 
+   * For MCGS scales with cumulative mode:
+   * 1. setCurrentMobileWeight(rawReading) applies: trueWeight = raw - sessionGVW
+   * 2. Frontend displays trueWeight via currentMobileWeight  
+   * 3. Handlers call addAxleWeight(currentMobileWeight) ← Already corrected
+   * 4. This method stores it directly
+   * 
+   * @param {number} weight - Axle weight in kg (should already be corrected by setCurrentMobileWeight)
    * @returns {Object} - Axle data with calculated GVW
    */
   addAxleWeight(weight) {
+    // For debugging: log when weight might look like a raw cumulative reading
+    // This helps identify if handlers are accidentally passing raw values
+    try {
+      const ConfigManager = require('../config/ConfigManager');
+      const activeSource = ConfigManager.get('input.activeSource');
+      const useCumulative = ConfigManager.get(`input.${activeSource}.useCumulativeWeight`, false);
+      
+      if (useCumulative && !this.simulation) {
+        const currentGvw = this.mobileState.axles.reduce((sum, a) => sum + a.weight, 0);
+        // If weight is significantly larger than expected, it might be raw/cumulative
+        // Log for debugging, but don't adjust (that's already done in setCurrentMobileWeight)
+        if (weight > currentGvw + 1000) {
+          console.warn(
+            `[StateManager.addAxleWeight] Weight appears to be cumulative (${weight}kg > SessionGVW+1000 (${currentGvw + 1000}kg)). ` +
+            `Handlers should pass currentMobileWeight, not raw scale reading.`
+          );
+        }
+      }
+    } catch (err) {
+      // Ignore if ConfigManager unavailable
+    }
+
     this.mobileState.currentAxle++;
     const axleData = {
       axleNumber: this.mobileState.currentAxle,
-      weight: weight,
+      weight: weight,  // Store weight as provided (should already be corrected)
       timestamp: new Date().toISOString()
     };
     this.mobileState.axles.push(axleData);

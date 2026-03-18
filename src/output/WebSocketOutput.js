@@ -566,6 +566,9 @@ class WebSocketOutput extends EventEmitter {
    * Handle axle captured notification (mobile mode)
    * TruLoad sends this after user confirms axle weight capture.
    * When all expected axles are captured, auto-submits to backend.
+   * 
+   * IMPORTANT: For MCGS cumulative scales, uses currentMobileWeight (already corrected)
+   * instead of relying on frontend-provided weight, ensuring accurate individual axle weights.
    */
   handleAxleCaptured(clientId, data) {
     const client = this.clients.get(clientId);
@@ -574,7 +577,11 @@ class WebSocketOutput extends EventEmitter {
       return;
     }
 
-    const { axleNumber, weight } = data;
+    const { axleNumber } = data;
+    
+    // Use currentMobileWeight (already cumulative-adjusted) for MCGS and similar
+    // This prevents double-application of cumulative logic
+    const weight = StateManager.getCurrentMobileWeight();
 
     console.log(`Axle ${axleNumber} captured: ${weight}kg from ${client.stationCode}`);
 

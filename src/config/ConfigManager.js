@@ -53,7 +53,21 @@ class ConfigManager {
       let loadedCount = 0;
       for (const { key, value } of settings) {
         const parsedValue = this.parseValue(value);
-        this.setByPath(key, parsedValue);
+
+        // When a DB row contains a JSON object (blob), shallow-merge it with the existing
+        // config at that path so default fields not present in the blob are preserved.
+        // This prevents a stored blob like {"enabled":true,...} (missing useCumulativeWeight)
+        // from silently wiping out default values set in defaults.js.
+        if (parsedValue !== null && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
+          const existingValue = this.getByPath(key);
+          if (existingValue !== null && typeof existingValue === 'object' && !Array.isArray(existingValue)) {
+            this.setByPath(key, { ...existingValue, ...parsedValue });
+          } else {
+            this.setByPath(key, parsedValue);
+          }
+        } else {
+          this.setByPath(key, parsedValue);
+        }
         loadedCount++;
 
         // Log important settings for debugging

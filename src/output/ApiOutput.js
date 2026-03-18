@@ -469,15 +469,19 @@ class ApiOutput extends EventEmitter {
 
     // Axle captured (mirrors WebSocket axle-captured; when last axle: send autoweigh then reset)
     router.post('/axle-captured', (req, res) => {
-      const { axleNumber, weight, axleConfigurationId } = req.body;
-      if (axleNumber == null || weight == null) {
+      const { axleNumber, weight: frontendWeight, axleConfigurationId } = req.body;
+      if (axleNumber == null) {
         return res.status(400).json({
           success: false,
-          error: 'axleNumber and weight are required',
+          error: 'axleNumber is required',
           timestamp: new Date().toISOString()
         });
       }
       try {
+        // Use currentMobileWeight (already cumulative-adjusted) for MCGS and similar
+        // This prevents double-application of cumulative logic
+        const weight = StateManager.getCurrentMobileWeight();
+        
         StateManager.addAxleWeight(weight);
         EventBus.emit('axle:captured', { axleNumber, weight, source: 'api' });
         const isComplete = StateManager.isWeighingComplete();

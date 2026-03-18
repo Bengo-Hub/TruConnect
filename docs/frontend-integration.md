@@ -328,6 +328,27 @@ Notify middleware when user confirms axle weight capture (mobile mode).
 }
 ```
 
+**IMPORTANT - Cumulative Weight Logic (MCGS Scales)**:
+
+For MCGS mobile scales and other cumulative-weight sources:
+
+> The `weight` field should contain the **individual axle weight** (already cumulative-adjusted by the middleware). 
+> The middleware provides this as `currentMobileWeight` which is calculated by subtracting the session GVW from the raw scale reading.
+
+**Example for 2-Axle Vehicle**:
+- **Axle 1**: Scale reads 940 kg
+  - Middleware calculates: 940 - 0 = 940 kg
+  - Frontend receives `currentMobileWeight: 940`
+  - Frontend sends `axle-captured(weight: 940)` ✓
+
+- **Axle 2**: Scale reads 1580 kg (cumulative: 940+640)
+  - Middleware calculates: 1580 - 940 = 640 kg
+  - Frontend receives `currentMobileWeight: 640`
+  - Frontend sends `axle-captured(weight: 640)` ✓
+
+**Note**: The middleware applies cumulative weight logic again at capture time as a safety net. 
+So even if the frontend sends the raw scale reading (1580), the middleware will correct it to 640.
+
 ### 4. `vehicle-complete`
 Notify middleware when vehicle weighing is complete.
 
