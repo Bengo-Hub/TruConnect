@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TruConnect - Settings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
     :root {
@@ -326,11 +328,11 @@
       transition: 0.3s;
     }
 
-    input:checked + .toggle-slider {
+    input:checked+.toggle-slider {
       background: var(--primary);
     }
 
-    input:checked + .toggle-slider:before {
+    input:checked+.toggle-slider:before {
       transform: translateX(24px);
     }
 
@@ -512,8 +514,15 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
     }
 
     /* URL display box */
@@ -710,6 +719,7 @@
         opacity: 0;
         transform: translateY(20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -717,6 +727,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="settings-wrapper">
     <!-- Sidebar -->
@@ -868,10 +879,17 @@
               </div>
             </div>
             <div class="form-group">
-              <label for="paw-query">Query Command
-                <small>Command sent to request weight (default: 'W')</small>
-              </label>
-              <input type="text" id="paw-query" class="form-control" placeholder="W" value="W">
+              <div class="toggle-wrapper" style="margin-top: 15px;">
+                <div>
+                  <label>Use Cumulative Weight</label>
+                  <small style="color: var(--text-secondary);">Subtract previously accumulated GVW from raw
+                    reading</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="paw-cumulative">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -885,11 +903,26 @@
               <label for="haenni-url">API URL
                 <small>Haenni WebServer measurement endpoint</small>
               </label>
-              <input type="text" id="haenni-url" class="form-control" placeholder="http://localhost:8888/devices/measurements" value="http://localhost:8888/devices/measurements">
+              <input type="text" id="haenni-url" class="form-control"
+                placeholder="http://localhost:8888/devices/measurements"
+                value="http://localhost:8888/devices/measurements">
             </div>
             <div class="form-group">
               <label for="haenni-interval">Poll Interval (ms)</label>
               <input type="number" id="haenni-interval" class="form-control" placeholder="500" value="500">
+            </div>
+            <div class="form-group">
+              <div class="toggle-wrapper" style="margin-top: 15px;">
+                <div>
+                  <label>Use Cumulative Weight</label>
+                  <small style="color: var(--text-secondary);">Subtract previously accumulated GVW from raw
+                    reading</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="haenni-cumulative">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -897,7 +930,8 @@
           <div class="form-section" id="mcgs-config" style="display: none;">
             <h3 class="form-section-title"><i class="fas fa-weight-hanging"></i> MCGS Mobile Scale (Serial)</h3>
             <p style="color: var(--text-secondary); margin-bottom: 20px;">
-              Serial connection to MCGS console. Frames: <code>=SG+0000123kR</code> or <code>=SG+0000060kX</code> (A+B combined).
+              Serial connection to MCGS console. Frames: <code>=SG+0000123kR</code> or <code>=SG+0000060kX</code> (A+B
+              combined).
               Optional commands trigger console weigh/zero/stop (STX=0x02, ETX=0x03). Leave empty to use defaults.
             </p>
             <div class="form-row">
@@ -916,7 +950,8 @@
             </div>
             <div class="form-row" style="margin-top: 16px;">
               <div class="form-group">
-                <label for="mcgs-cmd-weigh">Weigh command <small>(STX 'A' ETX → request current axle GVW)</small></label>
+                <label for="mcgs-cmd-weigh">Weigh command <small>(STX 'A' ETX → request current axle
+                    GVW)</small></label>
                 <input type="text" id="mcgs-cmd-weigh" class="form-control" placeholder="\x02A\x03">
               </div>
               <div class="form-group">
@@ -926,6 +961,19 @@
               <div class="form-group">
                 <label for="mcgs-cmd-stop">Stop command <small>(cancel session)</small></label>
                 <input type="text" id="mcgs-cmd-stop" class="form-control" placeholder="STOP\r\n">
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="toggle-wrapper" style="margin-top: 15px;">
+                <div>
+                  <label>Use Cumulative Weight</label>
+                  <small style="color: var(--text-secondary);">Subtract previously accumulated GVW from raw
+                    reading</small>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="mcgs-cumulative">
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
             </div>
           </div>
@@ -1252,11 +1300,14 @@
               <div class="form-row">
                 <div class="form-group">
                   <label for="backend-auth-endpoint">Auth Endpoint</label>
-                  <input type="text" id="backend-auth-endpoint" class="form-control" placeholder="/api/v1/auth/login" value="/api/v1/auth/login">
+                  <input type="text" id="backend-auth-endpoint" class="form-control" placeholder="/api/v1/auth/login"
+                    value="/api/v1/auth/login">
                 </div>
                 <div class="form-group">
                   <label for="backend-autoweigh-endpoint">Autoweigh Endpoint</label>
-                  <input type="text" id="backend-autoweigh-endpoint" class="form-control" placeholder="/api/v1/weighing-transactions/autoweigh" value="/api/v1/weighing-transactions/autoweigh">
+                  <input type="text" id="backend-autoweigh-endpoint" class="form-control"
+                    placeholder="/api/v1/weighing-transactions/autoweigh"
+                    value="/api/v1/weighing-transactions/autoweigh">
                 </div>
               </div>
               <div class="connection-error" id="backend-connection-error">
@@ -1340,7 +1391,8 @@
                 </div>
                 <div class="form-group">
                   <label for="autoweigh-retry-delay">Retry Delay (ms)</label>
-                  <input type="number" id="autoweigh-retry-delay" class="form-control" value="5000" min="1000" max="60000">
+                  <input type="number" id="autoweigh-retry-delay" class="form-control" value="5000" min="1000"
+                    max="60000">
                 </div>
               </div>
             </div>
@@ -1908,13 +1960,14 @@
           type: 'serial',
           protocol: 'PAW',
           serial: {
-            port: document.getElementById('paw-port').value || 'COM7',
+            port: document.getElementById('paw-port').value || 'COM3',
             baudRate: parseInt(document.getElementById('paw-baud').value) || 9600,
             dataBits: 8,
             parity: 'none',
             stopBits: 1,
             queryCommand: document.getElementById('paw-query').value || 'W'
-          }
+          },
+          useCumulativeWeight: document.getElementById('paw-cumulative').checked
         };
       } else if (source === 'haenni') {
         config.haenni = {
@@ -1925,7 +1978,8 @@
             url: document.getElementById('haenni-url').value || 'http://localhost:8888/devices/measurements',
             interval: parseInt(document.getElementById('haenni-interval').value) || 500,
             method: 'GET'
-          }
+          },
+          useCumulativeWeight: document.getElementById('haenni-cumulative').checked
         };
       } else if (source === 'mcgs') {
         const weighCmd = document.getElementById('mcgs-cmd-weigh').value.trim();
@@ -1947,7 +2001,8 @@
               zero: zeroCmd || '\\x02D\\x03',
               stop: stopCmd || 'STOP\\r\\n'
             }
-          }
+          },
+          useCumulativeWeight: document.getElementById('mcgs-cumulative').checked
         };
       } else if (source.startsWith('indicator_') || source === 'custom') {
         const connectionType = document.getElementById('indicator-connection').value;
@@ -2112,6 +2167,7 @@
           document.getElementById('paw-port').value = paw.serial?.port || 'COM7';
           document.getElementById('paw-baud').value = paw.serial?.baudRate || 9600;
           document.getElementById('paw-query').value = paw.serial?.queryCommand || 'W';
+          document.getElementById('paw-cumulative').checked = paw.useCumulativeWeight || false;
         }
 
         // Populate Haenni config
@@ -2119,6 +2175,7 @@
           const haenni = settings.input.haenni;
           document.getElementById('haenni-url').value = haenni.api?.url || 'http://localhost:8888/devices/measurements';
           document.getElementById('haenni-interval').value = haenni.api?.interval || 500;
+          document.getElementById('haenni-cumulative').checked = haenni.useCumulativeWeight || false;
         }
 
         // Populate MCGS config
@@ -2130,6 +2187,7 @@
           document.getElementById('mcgs-cmd-weigh').value = cmds?.weigh || '';
           document.getElementById('mcgs-cmd-zero').value = cmds?.zero || '';
           document.getElementById('mcgs-cmd-stop').value = cmds?.stop || '';
+          document.getElementById('mcgs-cumulative').checked = mcgs.useCumulativeWeight || false;
         }
 
         // Populate indicator config (for any indicator_* source)
@@ -2213,7 +2271,7 @@
       try {
         if (api.checkSession) {
           const authResult = await api.checkSession();
-          if (authResult.authenticated && authResult.user?.email === 'user@truconnect.com') {
+          if (authResult.authenticated && authResult.user?.role === 'operator') {
             const allowedTabs = ['general', 'input', 'output'];
             elements.sidebarItems.forEach(item => {
               if (!allowedTabs.includes(item.dataset.tab)) {
@@ -2237,4 +2295,5 @@
     });
   </script>
 </body>
+
 </html>

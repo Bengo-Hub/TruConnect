@@ -455,19 +455,51 @@ class StateManager {
   }
 
   /**
-   * Reset state
+   * Reset all weighing state (both mobile and multideck)
    */
   reset() {
+    // Reset weights
     this.weights = { deck1: 0, deck2: 0, deck3: 0, deck4: 0, gvw: 0 };
     this.lastWeights = { ...this.weights };
     this.vehicleOnDeck = false;
+    this.currentMobileWeight = 0;
+    this.mobileWeightStable = true;
+
+    // Reset vehicle state
     this.currentPlate = null;
     this.plateSource = null;
     this.plateTimestamp = null;
-    this.mobileState = { currentAxle: 0, totalAxles: 0, axles: [] };
-    // Reset mobile weight
-    this.currentMobileWeight = 0;
-    this.mobileWeightStable = true;
+
+    // Reset mobile session state
+    this.mobileState = {
+      currentAxle: 0,
+      totalAxles: 0,
+      axles: []
+    };
+
+    // Reset configuration
+    this.axleConfig = {
+      expectedAxles: 0,
+      axleConfigurationId: null,
+      axleConfigurationCode: null,
+      vehicleId: null,
+      plateNumber: null
+    };
+
+    // Reset sync and detection
+    this.clearTransactionSync();
+    this.autoDetection.state = 'idle';
+    this.autoDetection.stabilityCount = 0;
+
+    console.log('[StateManager] Full state reset performed');
+    this.eventBus.emitEvent('session:reset', {});
+  }
+
+  /**
+   * Reset mobile weighing session (partial reset)
+   */
+  resetMobileSession() {
+    this.reset();
   }
 
   // ============ Mobile Mode Methods ============
@@ -510,28 +542,7 @@ class StateManager {
     return { ...axleData, gvw };
   }
 
-  /**
-   * Reset mobile weighing session
-   */
-  resetMobileSession() {
-    this.mobileState = {
-      currentAxle: 0,
-      totalAxles: 0,
-      axles: []
-    };
-    this.axleConfig = {
-      expectedAxles: 0,
-      axleConfigurationId: null,
-      axleConfigurationCode: null,
-      vehicleId: null,
-      plateNumber: null
-    };
-    this.clearTransactionSync();
-    this.autoDetection.state = 'idle';
-    this.autoDetection.stabilityCount = 0;
-    this.clearPlate();
-    this.eventBus.emitEvent('mobile:session-reset', {});
-  }
+
 
   // ============ Axle Configuration Methods ============
 

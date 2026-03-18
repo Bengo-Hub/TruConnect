@@ -16,7 +16,7 @@ const defaults = require('../config/defaults');
 
 // Current seed version - increment when adding new seeds
 // v2.1.0: New input configuration structure with separate scale/indicator configs
-const SEED_VERSION = '2.1.2';
+const SEED_VERSION = '2.1.3';
 
 const DEFAULT_ADMIN = {
   email: 'admin@codevertexitsolutions.com',
@@ -38,15 +38,6 @@ const DEFAULT_STATIONS = [
     multi_deck_per_bound: false,
     bounds: [
       { letter: 'A', full_code: 'NRBA', name: 'Default' },
-    ]
-  },
-  {
-    base_code: 'NYZ',
-    station_name: 'Nyanza Region Mobile Unit',
-    bidirectional: false,
-    multi_deck_per_bound: false,
-    bounds: [
-      { letter: 'A', full_code: 'NYZA', name: 'Lane A' },
     ]
   }
 ];

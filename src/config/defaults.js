@@ -358,7 +358,9 @@ module.exports = {
     minWeight: 1000,                  // Min for dynamic mode
     maxWeight: 50000,                 // Max for dynamic mode
     updateInterval: 1000,             // Update interval (ms)
-    pattern: 'mobile'                 // 'mobile' | 'multideck' for pattern mode
+    pattern: 'mobile',                // 'mobile' | 'multideck' for pattern mode
+    defaultMultideckVehicleType: 'lorry2axle',  // 2A weights by default for multideck simulation
+    staticDeckCount: 2                // 2A: only decks 1-2 for static multideck (decks 3-4 zero)
   },
 
   // Logging settings

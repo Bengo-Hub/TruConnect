@@ -21,7 +21,8 @@ class SimulationEngine {
       minWeight: 1000,
       maxWeight: 50000,
       pattern: 'multideck', // 'mobile' | 'multideck'
-      deckCount: 4
+      deckCount: 4,
+      defaultMultideckVehicleType: 'lorry2axle' // 2A weights by default for multideck simulation
     };
 
     this.generator = new WeightGenerator();
@@ -425,9 +426,9 @@ class SimulationEngine {
    * Simulates a realistic vehicle with different axle loads
    */
   generateStaticWeights() {
-    // Generate different but stable weights for each deck
-    // Use seeded values based on deck position for variety but consistency
-    // Typical truck: front axles lighter, rear axles heavier
+    // Default multideck simulation to 2A (2 axles): decks 1–2 only, decks 3–4 zero
+    const effectiveDeckCount = this.config.staticDeckCount ?? (this.config.defaultMultideckVehicleType === 'lorry2axle' ? 2 : 4);
+
     const baseWeights = [
       9000,   // Deck 1
       9500,   // Deck 2
@@ -436,15 +437,13 @@ class SimulationEngine {
     ];
 
     const weights = [];
-    for (let i = 0; i < this.config.deckCount; i++) {
-      // Add small variation (±200kg) for realism
-      const variation = Math.floor(Math.random() * 400) - 200;
-      weights.push(baseWeights[i] + variation);
-    }
-
-    // Fill remaining decks with 0
-    while (weights.length < 4) {
-      weights.push(0);
+    for (let i = 0; i < 4; i++) {
+      if (i < effectiveDeckCount) {
+        const variation = Math.floor(Math.random() * 400) - 200;
+        weights.push(baseWeights[i] + variation);
+      } else {
+        weights.push(0);
+      }
     }
 
     return weights;
@@ -570,7 +569,7 @@ class SimulationEngine {
         }
 
         state.phase = 'entering';
-        state.vehicleType = this.generator.randomVehicleType();
+        state.vehicleType = this.config.defaultMultideckVehicleType || this.generator.randomVehicleType();
         state.targetWeights = this.generator.generateVehicleWeights(state.vehicleType);
         state.currentWeights = [0, 0, 0, 0];
         return state.currentWeights;

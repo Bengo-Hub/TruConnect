@@ -452,6 +452,14 @@ class BackendClient {
   }
 
   /**
+   * True when frontend has synced a weighing transaction (frontend-led flow).
+   * When set, middleware must not create/update via autoweigh; only frontend submits via capture-weights.
+   */
+  hasSyncedTransaction() {
+    return Boolean(this.currentSession.weighingTransactionId);
+  }
+
+  /**
    * Get connection status
    */
   getStatus() {
@@ -547,6 +555,10 @@ BackendClient.getSession = function() {
 
 BackendClient.isAutoweighSent = function() {
   return BackendClient.getInstance().isAutoweighSent();
+};
+
+BackendClient.hasSyncedTransaction = function() {
+  return BackendClient.getInstance().hasSyncedTransaction();
 };
 
 BackendClient.getStatus = function() {

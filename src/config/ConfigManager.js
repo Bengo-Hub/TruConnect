@@ -196,15 +196,19 @@ class ConfigManager {
   }
 
   /**
-   * Merge values into a section
+   * Merge values into a section (recursive)
    */
   mergeSection(section, values, persist = true) {
-    const current = this.config[section] || {};
-    this.config[section] = { ...current, ...values };
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      return this.set(section, values, persist);
+    }
 
-    if (persist) {
-      for (const [key, value] of Object.entries(values)) {
-        this.persistToDatabase(`${section}.${key}`, value);
+    for (const [key, value] of Object.entries(values)) {
+      const fullPath = section ? `${section}.${key}` : key;
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        this.mergeSection(fullPath, value, persist);
+      } else {
+        this.set(fullPath, value, persist);
       }
     }
 

@@ -1413,7 +1413,7 @@
       const authenticated = typeof authResult === 'object' ? authResult.authenticated : !!authResult;
       isAuthenticated = authenticated;
       const user = (typeof authResult === 'object' && authResult.user) ? authResult.user : {};
-      const isOperator = user.email === 'user@truconnect.com';
+      const isOperator = user.role === 'operator';
 
       // Show/hide auth-required elements with appropriate display type
       const authRequired = document.querySelectorAll('.auth-required');

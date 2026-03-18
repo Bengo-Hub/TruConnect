@@ -18,6 +18,7 @@ const { EventEmitter } = require('events');
 const StateManager = require('../core/StateManager');
 const EventBus = require('../core/EventBus');
 const ConfigManager = require('../config/ConfigManager');
+const BackendClient = require('../backend/BackendClient');
 
 class ApiOutput extends EventEmitter {
   constructor(config = {}) {
@@ -145,10 +146,13 @@ class ApiOutput extends EventEmitter {
         // Debug logging
         console.log(`[API /weights] Mobile mode - currentWeight: ${currentWeight}, capturedGvw: ${capturedGvw}, runningGvw: ${runningGvw}, simulation: ${simulation}`);
 
+        const wsPort = ConfigManager.get('output.websocket.port', 3030);
         res.json({
           success: true,
           mode: 'mobile',
           simulation,
+          websocketAvailable: true,
+          websocketUrl: `ws://localhost:${wsPort}`,
           data: {
             currentWeight: currentWeight,  // Live scale reading (total axle weight)
             // Individual scale weights (for scale test and diagnostics)
@@ -196,11 +200,13 @@ class ApiOutput extends EventEmitter {
         // Multideck mode response
         const weights = StateManager.getWeights();
         const indicatorInfo = StateManager.getIndicatorInfo();
-
+        const wsPortDeck = ConfigManager.get('output.websocket.port', 3030);
         res.json({
           success: true,
           mode: 'multideck',
           simulation,
+          websocketAvailable: true,
+          websocketUrl: `ws://localhost:${wsPortDeck}`,
           data: {
             decks: [
               { index: 1, weight: weights.deck1, stable: true },
@@ -422,6 +428,163 @@ class ApiOutput extends EventEmitter {
         },
         timestamp: new Date().toISOString()
       });
+    });
+
+    // Transaction sync (mirrors WebSocket transaction-sync)
+    router.post('/transaction-sync', (req, res) => {
+      const data = req.body;
+      if (!data || !data.transactionId || !data.vehicleRegNumber) {
+        return res.status(400).json({
+          success: false,
+          error: 'transactionId and vehicleRegNumber are required',
+          timestamp: new Date().toISOString()
+        });
+      }
+      try {
+        StateManager.setTransactionSync(data);
+        BackendClient.syncFromTransaction(data);
+        BackendClient.startSession({
+          weighingTransactionId: data.transactionId,
+          regNumber: data.vehicleRegNumber,
+          weighingMode: data.weighingMode
+        });
+        if (data.totalAxles) {
+          StateManager.setAxleConfiguration({
+            expectedAxles: data.totalAxles,
+            axleConfigurationCode: data.axleConfigCode,
+            plateNumber: data.vehicleRegNumber
+          });
+        }
+        EventBus.emit('transaction:synced', { ...data, source: 'api' });
+        res.json({
+          success: true,
+          data: { transactionId: data.transactionId, vehicleRegNumber: data.vehicleRegNumber },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] transaction-sync error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Axle captured (mirrors WebSocket axle-captured; when last axle: send autoweigh then reset)
+    router.post('/axle-captured', (req, res) => {
+      const { axleNumber, weight, axleConfigurationId } = req.body;
+      if (axleNumber == null || weight == null) {
+        return res.status(400).json({
+          success: false,
+          error: 'axleNumber and weight are required',
+          timestamp: new Date().toISOString()
+        });
+      }
+      try {
+        StateManager.addAxleWeight(weight);
+        EventBus.emit('axle:captured', { axleNumber, weight, source: 'api' });
+        const isComplete = StateManager.isWeighingComplete();
+        const mobileState = StateManager.getMobileState();
+        const expectedAxles = StateManager.getAxleConfiguration().expectedAxles;
+
+        if (isComplete && !BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction()) {
+          const axleConfig = StateManager.getAxleConfiguration();
+          BackendClient.sendAutoweigh({
+            plateNumber: axleConfig.plateNumber || StateManager.getInstance().currentPlate,
+            vehicleId: axleConfig.vehicleId,
+            axleConfigurationId: axleConfig.axleConfigurationId,
+            axles: mobileState.axles,
+            gvw: mobileState.gvw
+          }).then(() => {}).catch(err => console.error('[ApiOutput] Autoweigh failed:', err.message))
+            .finally(() => {
+              StateManager.resetMobileSession();
+              console.log('[ApiOutput] Weighing session reset after auto-weigh attempt');
+            });
+        } else if (isComplete && BackendClient.hasSyncedTransaction()) {
+          StateManager.resetMobileSession();
+          console.log('[ApiOutput] All axles captured but frontend has synced transaction - session reset, no autoweigh');
+        }
+
+        res.json({
+          success: true,
+          data: {
+            axleNumber,
+            weight,
+            isComplete,
+            capturedAxles: mobileState.axles.length,
+            expectedAxles,
+            gvw: mobileState.gvw
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] axle-captured error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Vehicle complete (mirrors WebSocket vehicle-complete; send autoweigh then reset)
+    router.post('/vehicle-complete', (req, res) => {
+      const { transactionId, totalAxles, axleWeights, gvw, axleConfigurationCode } = req.body;
+      if (!axleWeights || !Array.isArray(axleWeights)) {
+        return res.status(400).json({
+          success: false,
+          error: 'axleWeights array is required',
+          timestamp: new Date().toISOString()
+        });
+      }
+      try {
+        const statePlate = StateManager.getState().plate;
+        const plateNumber = (statePlate && typeof statePlate === 'object' ? statePlate.plate : statePlate) || null;
+        EventBus.emit('vehicle:complete', { totalAxles, axleWeights, gvw, plateNumber, source: 'api' });
+        const axles = axleWeights.map((weight, index) => ({ axleNumber: index + 1, weight }));
+        const gvwSum = gvw || axles.reduce((sum, a) => sum + a.weight, 0);
+
+        if (!BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction() && axles.length > 0) {
+          const axleConfig = StateManager.getAxleConfiguration();
+          BackendClient.sendAutoweigh({
+            plateNumber: axleConfig.plateNumber || plateNumber,
+            vehicleId: axleConfig.vehicleId,
+            axleConfigurationId: axleConfig.axleConfigurationId,
+            axles,
+            gvw: gvwSum
+          }).then(() => {}).catch(err => console.error('[ApiOutput] Autoweigh failed:', err.message))
+            .finally(() => {
+              StateManager.resetMobileSession();
+              StateManager.getInstance().reset();
+              console.log('[ApiOutput] Weighing session and deck weights reset after vehicle-complete');
+            });
+        } else if (BackendClient.hasSyncedTransaction() && axles.length > 0) {
+          StateManager.resetMobileSession();
+          StateManager.getInstance().reset();
+          console.log('[ApiOutput] Vehicle complete but frontend has synced transaction - session reset, no autoweigh');
+        }
+
+        res.json({
+          success: true,
+          data: { success: true, gvw: gvwSum },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] vehicle-complete error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Reset session (mirrors WebSocket reset-session)
+    router.post('/reset-session', (req, res) => {
+      try {
+        EventBus.emit('session:reset', { source: 'api' });
+        StateManager.setPlate(null, null);
+        StateManager.clearTransactionSync();
+        BackendClient.resetSession();
+        StateManager.getInstance().reset();
+        res.json({
+          success: true,
+          data: { success: true },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] reset-session error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
     });
 
     // Register station (for compatibility)

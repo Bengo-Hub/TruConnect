@@ -51,6 +51,7 @@ let settingsWindow = null;
 let loginWindow = null;
 let appIsQuitting = false;
 let isAuthenticated = false;
+let currentUser = null;
 
 /**
  * Create the main application window
@@ -1041,6 +1042,7 @@ ipcMain.handle('auth:login', async (event, { email, password, rememberMe }) => {
 
     if (result.success) {
       isAuthenticated = true;
+      currentUser = result.user;
       // Close login window and show main window if needed
       if (loginWindow) {
         loginWindow.close();
@@ -1064,6 +1066,7 @@ ipcMain.handle('auth:logout', async () => {
     const AuthManager = require('./src/auth/AuthManager');
     await AuthManager.logout();
     isAuthenticated = false;
+    currentUser = null;
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -1071,7 +1074,10 @@ ipcMain.handle('auth:logout', async () => {
 });
 
 ipcMain.handle('auth:check-session', async () => {
-  return { authenticated: isAuthenticated };
+  return { 
+    authenticated: isAuthenticated,
+    user: currentUser
+  };
 });
 
 // Get saved credentials (for "Remember Me" feature)

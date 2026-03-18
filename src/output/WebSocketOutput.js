@@ -605,8 +605,8 @@ class WebSocketOutput extends EventEmitter {
       gvw: mobileState.gvw
     });
 
-    // Auto-submit to backend when all axles are captured
-    if (isComplete && !BackendClient.isAutoweighSent()) {
+    // Auto-submit to backend when all axles are captured (standalone mode only; skip when frontend owns the transaction)
+    if (isComplete && !BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction()) {
       console.log(`[AutoWeigh] All ${mobileState.axles.length} axles captured via WebSocket - sending auto-weigh to backend...`);
 
       const axleConfig = StateManager.getAxleConfiguration();
@@ -626,14 +626,18 @@ class WebSocketOutput extends EventEmitter {
             gvw: result.gvwMeasuredKg,
             captureStatus: result.captureStatus
           });
-
-          // Clear session for fresh weighing
-          StateManager.resetMobileSession();
-          console.log('[AutoWeigh] Weighing session reset after successful submission');
         }
       }).catch(err => {
         console.error('[AutoWeigh] Auto-weigh submission failed:', err.message);
+      }).finally(() => {
+        // Always reset middleware weights for next weighing session (success or fail)
+        StateManager.resetMobileSession();
+        console.log('[AutoWeigh] Weighing session reset after auto-weigh attempt');
       });
+    } else if (isComplete && BackendClient.hasSyncedTransaction()) {
+      // Frontend owns the transaction; only reset for next session, no autoweigh
+      StateManager.resetMobileSession();
+      console.log('[AutoWeigh] All axles captured but frontend has synced transaction - session reset, no autoweigh');
     }
 
     // Trigger query for next axle weight after configured delay
@@ -683,8 +687,8 @@ class WebSocketOutput extends EventEmitter {
       weight: weight
     }));
 
-    // Auto-submit to backend
-    if (!BackendClient.isAutoweighSent() && axles.length > 0) {
+    // Auto-submit to backend (standalone mode only; skip when frontend owns the transaction)
+    if (!BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction() && axles.length > 0) {
       console.log(`[AutoWeigh] Vehicle complete via WebSocket - sending auto-weigh to backend (${axles.length} axles, GVW=${gvw}kg)...`);
 
       const axleConfig = StateManager.getAxleConfiguration();
@@ -704,14 +708,20 @@ class WebSocketOutput extends EventEmitter {
             gvw: result.gvwMeasuredKg,
             captureStatus: result.captureStatus
           });
-
-          // Clear session for fresh weighing
-          StateManager.resetMobileSession();
-          console.log('[AutoWeigh] Weighing session reset after successful submission (vehicle-complete)');
         }
       }).catch(err => {
         console.error('[AutoWeigh] Auto-weigh submission failed:', err.message);
+      }).finally(() => {
+        // Always reset weights for next vehicle (mobile + multideck deck weights)
+        StateManager.resetMobileSession();
+        StateManager.getInstance().reset();
+        console.log('[AutoWeigh] Weighing session and deck weights reset after vehicle-complete');
       });
+    } else if (BackendClient.hasSyncedTransaction() && axles.length > 0) {
+      // Frontend owns the transaction (e.g. after confirm); only reset, no autoweigh
+      StateManager.resetMobileSession();
+      StateManager.getInstance().reset();
+      console.log('[AutoWeigh] Vehicle complete but frontend has synced transaction - session reset, no autoweigh');
     }
 
     // Acknowledge
@@ -730,15 +740,13 @@ class WebSocketOutput extends EventEmitter {
 
     console.log(`Session reset requested by ${clientId}`);
 
-    // Reset mobile scale state
-    EventBus.emit('session:reset', { clientId });
+    // Full state reset in StateManager
+    StateManager.getInstance().reset();
 
-    // Clear plate
-    StateManager.setCurrentPlate(null, null);
-
-    // Clear transaction sync and backend session
-    StateManager.clearTransactionSync();
-    BackendClient.resetSession();
+    // Reset backend session if applicable
+    if (typeof BackendClient !== 'undefined' && BackendClient.resetSession) {
+      BackendClient.resetSession();
+    }
 
     this.sendToClient(clientId, 'session-reset-ack', { success: true });
   }

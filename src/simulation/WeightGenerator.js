@@ -15,7 +15,13 @@ class WeightGenerator {
 
     // Vehicle weight profiles (typical weights in kg)
     // Updated to only include heavy vehicles (GVW >= 18,000kg)
+    // 2A = 2 axles (e.g. steering + drive), default for multideck simulation
     this.vehicleProfiles = {
+      lorry2axle: {
+        axles: 2,
+        gvwRange: [18000, 22000],
+        distribution: [0.45, 0.55]
+      },
       lorry3axle: {
         axles: 3,
         gvwRange: [18000, 25000],
