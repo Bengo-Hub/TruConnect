@@ -217,9 +217,10 @@ class OutputManager {
     // RDU outputs (send to active RDU)
     const rdu = this.outputs.serialRdu || this.outputs.networkRdu;
     if (rdu) {
-      // Send GVW for multideck or current weight for mobile
+      // Send GVW for multideck or current weight for mobile.
+      // Prefer correctedWeight (currentWeight) over raw parser weight for MCGS cumulative mode.
       const weightToSend = mode === 'mobile'
-        ? (weightData.weight || weightData.currentWeight || 0)
+        ? (weightData.currentWeight ?? weightData.weight ?? 0)
         : (weightData.gvw || StateManager.getGVW() || 0);
       rdu.sendWeight(weightToSend);
     }

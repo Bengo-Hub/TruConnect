@@ -527,18 +527,22 @@ class InputManager {
           if (isMobileSource || captureMode === 'mobile') {
             // Mobile mode: store as current live weight, NOT as deck weight
             // Use static method to ensure singleton consistency
+            // NOTE: setCurrentMobileWeight applies cumulative subtraction (raw - sessionGVW) for MCGS.
+            //       We must read back the corrected value so downstream (broadcast, renderer, capture) sees it.
             StateManager.setCurrentMobileWeight(weightData.weight, weightData.stable !== false);
+            const correctedWeight = StateManager.getCurrentMobileWeight();
 
             // Debug logging
-            console.log(`[Mobile Weight] Stored: ${weightData.weight}kg, Stable: ${weightData.stable !== false}`);
+            console.log(`[Mobile Weight] Raw: ${weightData.weight}kg, Corrected: ${correctedWeight}kg, Stable: ${weightData.stable !== false}`);
 
             // Emit as mobile weight event (don't update deck weights)
+            // Use correctedWeight so cumulative subtraction is reflected everywhere (display, auto-detect, capture)
             EventBus.emit('input:weight', {
               ...weightData,
               source: this.activeSource,
               protocol: this.config[this.activeSource]?.protocol,
               isMobile: true,
-              currentWeight: weightData.weight
+              currentWeight: correctedWeight
             });
           } else {
             // Multideck mode: update state manager with deck weights

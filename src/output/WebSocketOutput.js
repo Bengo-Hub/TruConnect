@@ -961,23 +961,25 @@ class WebSocketOutput extends EventEmitter {
       const mobileState = StateManager.getMobileState();
       const scaleInfo = StateManager.getMobileScaleInfo();
       const scaleStatus = StateManager.getScaleStatus();
-      const currentWeight = weightData.weight || weightData.gross || StateManager.getCurrentMobileWeight();
+      // Prefer correctedWeight (set by setCurrentMobileWeight after cumulative subtraction).
+      // weightData.weight is the raw parser value and will be the accumulated GVW for MCGS.
+      const currentWeight = weightData.currentWeight ?? weightData.weight ?? weightData.gross ?? StateManager.getCurrentMobileWeight();
 
       // Individual scale weights:
-      // - PAW returns combined weight, so scaleA = scaleB = total/2 (derived)
-      // - Haenni may return scaleA/scaleB separately (from weightData)
-      // - Default: derive from combined weight
+      // StateManager.scaleConnections always holds corrected split weights (trueWeight/2),
+      // set by setCurrentMobileWeight. Use these first so MCGS cumulative correction flows through.
+      // Fall back to parser-provided values only when StateManager hasn't populated them yet.
       let scaleAWeight, scaleBWeight;
-      if (weightData.scaleA !== undefined && weightData.scaleB !== undefined) {
-        // Haenni or other source providing separate weights
-        scaleAWeight = weightData.scaleA;
-        scaleBWeight = weightData.scaleB;
-      } else if (scaleStatus.scaleA?.weight || scaleStatus.scaleB?.weight) {
-        // Use weights from StateManager (already derived for PAW)
+      if (scaleStatus.scaleA?.weight || scaleStatus.scaleB?.weight) {
+        // StateManager has corrected split weights (already cumulative-adjusted)
         scaleAWeight = scaleStatus.scaleA?.weight || 0;
         scaleBWeight = scaleStatus.scaleB?.weight || 0;
+      } else if (weightData.scaleA !== undefined && weightData.scaleB !== undefined) {
+        // Fallback: parser-provided weights (used before StateManager is populated)
+        scaleAWeight = weightData.scaleA;
+        scaleBWeight = weightData.scaleB;
       } else {
-        // Derive from combined weight (PAW default)
+        // Derive from corrected combined weight
         scaleAWeight = Math.round(currentWeight / 2);
         scaleBWeight = currentWeight - scaleAWeight;
       }

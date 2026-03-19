@@ -139,9 +139,10 @@ class ApiOutput extends EventEmitter {
         const capturedGvw = mobileState.gvw || 0;  // Sum of captured axles
         const runningGvw = capturedGvw + currentWeight;  // Real-time total (captured + current)
 
-        // Individual scale weights (PAW: derived from combined weight, Haenni: may be separate)
-        const scaleAWeight = scaleStatus.scaleA?.weight || Math.round(currentWeight / 2);
-        const scaleBWeight = scaleStatus.scaleB?.weight || (currentWeight - scaleAWeight);
+        // Individual scale weights — prefer StateManager (already cumulative-adjusted by setCurrentMobileWeight).
+        // Fall back to derived split only when StateManager has not yet populated the scale weights.
+        const scaleAWeight = scaleStatus.scaleA?.weight ?? Math.round(currentWeight / 2);
+        const scaleBWeight = scaleStatus.scaleB?.weight ?? (currentWeight - scaleAWeight);
 
         // Debug logging
         console.log(`[API /weights] Mobile mode - currentWeight: ${currentWeight}, capturedGvw: ${capturedGvw}, runningGvw: ${runningGvw}, simulation: ${simulation}`);
