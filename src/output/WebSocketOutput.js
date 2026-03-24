@@ -280,6 +280,14 @@ class WebSocketOutput extends EventEmitter {
           this.handleQueryWeight(clientId, data);
           break;
 
+        case 'update-config':
+          this.handleUpdateConfig(clientId, data);
+          break;
+
+        case 'weights-captured':
+          this.handleWeightsCaptured(clientId, data);
+          break;
+
         default:
           console.warn(`Unknown event from ${clientId}: ${event}`);
       }
@@ -756,6 +764,54 @@ class WebSocketOutput extends EventEmitter {
     }
 
     this.sendToClient(clientId, 'session-reset-ack', { success: true });
+  }
+
+  /**
+   * Handle axle configuration update from frontend.
+   * Called when user changes axle config on step 2 — updates expected axle count.
+   */
+  handleUpdateConfig(clientId, data) {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    const { totalAxles, axleConfigurationCode } = data || {};
+    console.log(`[WebSocket] Config update from ${clientId}: ${axleConfigurationCode} (${totalAxles} axles)`);
+
+    const sm = StateManager.getInstance();
+    if (totalAxles != null) {
+      sm.axleConfig = {
+        ...sm.axleConfig,
+        expectedAxles: totalAxles,
+        axleConfigurationCode: axleConfigurationCode || sm.axleConfig.axleConfigurationCode,
+      };
+    }
+
+    this.sendToClient(clientId, 'update-config-ack', {
+      success: true,
+      totalAxles: sm.axleConfig.expectedAxles,
+      axleConfigurationCode: sm.axleConfig.axleConfigurationCode,
+    });
+  }
+
+  /**
+   * Handle weights-captured acknowledgment from frontend.
+   * Frontend sends this after processing the autoweigh response.
+   * TruConnect resets the session and initializes a new one.
+   */
+  handleWeightsCaptured(clientId, data) {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+
+    console.log(`[WebSocket] Weights captured acknowledged by ${clientId}, resetting session`);
+
+    // Full state reset and prepare for next vehicle
+    StateManager.getInstance().reset();
+
+    if (typeof BackendClient !== 'undefined' && BackendClient.resetSession) {
+      BackendClient.resetSession();
+    }
+
+    this.sendToClient(clientId, 'weights-captured-ack', { success: true });
   }
 
   /**

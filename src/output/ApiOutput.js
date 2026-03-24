@@ -613,6 +613,78 @@ class ApiOutput extends EventEmitter {
       });
     });
 
+    // Update axle configuration (mirrors WebSocket update-config)
+    router.post('/update-config', (req, res) => {
+      try {
+        const { totalAxles, axleConfigurationCode } = req.body;
+        const sm = StateManager.getInstance();
+        if (totalAxles != null) {
+          sm.axleConfig = {
+            ...sm.axleConfig,
+            expectedAxles: totalAxles,
+            axleConfigurationCode: axleConfigurationCode || sm.axleConfig.axleConfigurationCode,
+          };
+        }
+        res.json({
+          success: true,
+          data: { totalAxles: sm.axleConfig.expectedAxles, axleConfigurationCode: sm.axleConfig.axleConfigurationCode },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] update-config error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Weights captured acknowledgment (mirrors WebSocket weights-captured)
+    router.post('/weights-captured', (req, res) => {
+      try {
+        StateManager.getInstance().reset();
+        res.json({ success: true, timestamp: new Date().toISOString() });
+      } catch (err) {
+        console.error('[ApiOutput] weights-captured error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Bound switch (mirrors WebSocket bound-switch)
+    router.post('/bound-switch', (req, res) => {
+      try {
+        const { bound } = req.body;
+        if (!bound) {
+          return res.status(400).json({ success: false, error: 'bound is required' });
+        }
+        const sm = StateManager.getInstance();
+        sm.currentBound = bound;
+        EventBus.emit('bound:switch', { bound });
+        res.json({ success: true, data: { bound }, timestamp: new Date().toISOString() });
+      } catch (err) {
+        console.error('[ApiOutput] bound-switch error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
+    // Query weight (mirrors WebSocket query-weight)
+    router.post('/query-weight', (req, res) => {
+      try {
+        const sm = StateManager.getInstance();
+        const mobileState = sm.getMobileState();
+        res.json({
+          success: true,
+          data: {
+            weight: sm.currentMobileWeight,
+            axleWeights: mobileState.axles,
+            currentAxle: mobileState.currentAxle,
+            totalAxles: mobileState.totalAxles,
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('[ApiOutput] query-weight error:', err.message);
+        res.status(500).json({ success: false, error: err.message, timestamp: new Date().toISOString() });
+      }
+    });
+
     // Mount router at base path
     this.app.use(this.config.basePath, router);
 
