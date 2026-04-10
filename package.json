@@ -1,6 +1,6 @@
 {
   "name": "truconnect",
-  "version": "2.0.80",
+  "version": "2.0.81",
   "description": "TruConnect - Weighing Scale Middleware",
   "main": "main.js",
   "productName": "TruConnect",
