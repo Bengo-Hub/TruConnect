@@ -650,9 +650,11 @@ class WebSocketOutput extends EventEmitter {
         console.log('[AutoWeigh] Weighing session reset after auto-weigh attempt');
       });
     } else if (isComplete && BackendClient.hasSyncedTransaction()) {
-      // Frontend owns the transaction; only reset for next session, no autoweigh
-      StateManager.resetMobileSession();
-      console.log('[AutoWeigh] All axles captured but frontend has synced transaction - session reset, no autoweigh');
+      // Frontend owns the transaction — do NOT reset session here.
+      // Resetting prematurely clears mobileState.axles and cumulativeBaseOffset,
+      // which breaks the cumulative subtraction for any subsequent MCGS readings.
+      // The frontend will explicitly call 'weights-captured' or 'reset-session' when done.
+      console.log('[AutoWeigh] All axles captured but frontend has synced transaction - awaiting frontend reset');
     }
 
     // Trigger query for next axle weight after configured delay
@@ -1025,17 +1027,17 @@ class WebSocketOutput extends EventEmitter {
       // StateManager.scaleConnections always holds corrected split weights (trueWeight/2),
       // set by setCurrentMobileWeight. Use these first so MCGS cumulative correction flows through.
       // Fall back to parser-provided values only when StateManager hasn't populated them yet.
+      // IMPORTANT: Use != null (not ||) to avoid treating 0 as falsy — 0 is a valid weight
+      // (e.g., between axles when corrected weight is 0). Using || would fall back to raw
+      // parser weights, leaking uncorrected cumulative MCGS values.
       let scaleAWeight, scaleBWeight;
-      if (scaleStatus.scaleA?.weight || scaleStatus.scaleB?.weight) {
+      if (scaleStatus.scaleA?.weight != null || scaleStatus.scaleB?.weight != null) {
         // StateManager has corrected split weights (already cumulative-adjusted)
-        scaleAWeight = scaleStatus.scaleA?.weight || 0;
-        scaleBWeight = scaleStatus.scaleB?.weight || 0;
-      } else if (weightData.scaleA !== undefined && weightData.scaleB !== undefined) {
-        // Fallback: parser-provided weights (used before StateManager is populated)
-        scaleAWeight = weightData.scaleA;
-        scaleBWeight = weightData.scaleB;
+        scaleAWeight = scaleStatus.scaleA?.weight ?? 0;
+        scaleBWeight = scaleStatus.scaleB?.weight ?? 0;
       } else {
-        // Derive from corrected combined weight
+        // Derive from corrected combined weight (never use parser-provided raw scaleA/scaleB
+        // for MCGS since those are derived from the raw cumulative reading)
         scaleAWeight = Math.round(currentWeight / 2);
         scaleBWeight = currentWeight - scaleAWeight;
       }

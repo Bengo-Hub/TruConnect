@@ -120,6 +120,13 @@ class StateManager {
     this.currentMobileWeight = 0;
     this.mobileWeightStable = true;
 
+    // Cumulative weight tracking for MCGS scales
+    // Instead of relying on sum of captured axle weights (which can drift if captures are missed),
+    // we track the raw MCGS cumulative reading at the moment of each axle capture.
+    // This provides a robust baseline for subtraction regardless of missed WS notifications.
+    this.lastRawCumulativeWeight = 0;    // Latest raw reading from MCGS (updated every frame)
+    this.cumulativeBaseOffset = 0;       // Raw cumulative reading at last axle capture point
+
     // Mobile mode state
     this.mobileState = {
       currentAxle: 0,
@@ -465,6 +472,10 @@ class StateManager {
     this.currentMobileWeight = 0;
     this.mobileWeightStable = true;
 
+    // Reset cumulative weight tracking
+    this.lastRawCumulativeWeight = 0;
+    this.cumulativeBaseOffset = 0;
+
     // Reset vehicle state
     this.currentPlate = null;
     this.plateSource = null;
@@ -533,28 +544,6 @@ class StateManager {
    * @returns {Object} - Axle data with calculated GVW
    */
   addAxleWeight(weight) {
-    // For debugging: log when weight might look like a raw cumulative reading
-    // This helps identify if handlers are accidentally passing raw values
-    try {
-      const ConfigManager = require('../config/ConfigManager');
-      const activeSource = ConfigManager.get('input.activeSource');
-      const useCumulative = ConfigManager.get(`input.${activeSource}.useCumulativeWeight`, false);
-      
-      if (useCumulative && !this.simulation) {
-        const currentGvw = this.mobileState.axles.reduce((sum, a) => sum + a.weight, 0);
-        // If weight is significantly larger than expected, it might be raw/cumulative
-        // Log for debugging, but don't adjust (that's already done in setCurrentMobileWeight)
-        if (weight > currentGvw + 1000) {
-          console.warn(
-            `[StateManager.addAxleWeight] Weight appears to be cumulative (${weight}kg > SessionGVW+1000 (${currentGvw + 1000}kg)). ` +
-            `Handlers should pass currentMobileWeight, not raw scale reading.`
-          );
-        }
-      }
-    } catch (err) {
-      // Ignore if ConfigManager unavailable
-    }
-
     this.mobileState.currentAxle++;
     const axleData = {
       axleNumber: this.mobileState.currentAxle,
@@ -563,6 +552,17 @@ class StateManager {
     };
     this.mobileState.axles.push(axleData);
     this.mobileState.totalAxles = this.mobileState.axles.length;
+
+    // Update cumulative base offset to the current raw MCGS reading.
+    // This means the NEXT reading will be subtracted from THIS capture point,
+    // regardless of whether previous captures were missed by the middleware.
+    // This is the key fix: even if the frontend captured axle N but the WS was down
+    // and the middleware never got the notification, setting the base here when we DO
+    // get a capture ensures the next subtraction is correct.
+    if (this.lastRawCumulativeWeight > 0) {
+      this.cumulativeBaseOffset = this.lastRawCumulativeWeight;
+      console.log(`[StateManager.addAxleWeight] Axle ${axleData.axleNumber}: ${weight}kg, cumulativeBase updated to ${this.cumulativeBaseOffset}kg`);
+    }
 
     const gvw = this.mobileState.axles.reduce((sum, a) => sum + a.weight, 0);
 
@@ -1155,15 +1155,21 @@ StateManager.setCurrentMobileWeight = function(weight, stable = true, scaleWeigh
 
   // Cumulative logic for MCGS and similar scales
   // Only apply if enabled in config AND NOT in simulation mode
+  //
+  // Uses cumulativeBaseOffset (raw MCGS reading at last capture) instead of
+  // mobileState.axles.reduce(). This is more robust because:
+  // - If a capture notification is missed (e.g. WebSocket dropped), the base offset
+  //   is still correct from the LAST successful capture.
+  // - The old approach (sum of individual weights) would drift if any capture was missed,
+  //   corrupting ALL subsequent subtractions for the rest of the session.
   try {
     const ConfigManager = require('../config/ConfigManager');
     const activeSource = ConfigManager.get('input.activeSource');
     const useCumulative = ConfigManager.get(`input.${activeSource}.useCumulativeWeight`, false);
 
     if (useCumulative && !sm.simulation) {
-      const currentGvw = sm.mobileState.axles.reduce((sum, a) => sum + a.weight, 0);
-      trueWeight = Math.max(0, weight - currentGvw);
-      // console.log(`[Cumulative Logic] Raw: ${weight}, Previous GVW: ${currentGvw}, Calculated: ${trueWeight}, Source: ${activeSource}`);
+      sm.lastRawCumulativeWeight = weight;
+      trueWeight = Math.max(0, weight - sm.cumulativeBaseOffset);
     }
   } catch (err) {
     // Fallback if ConfigManager fails

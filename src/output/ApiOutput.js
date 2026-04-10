@@ -141,8 +141,9 @@ class ApiOutput extends EventEmitter {
 
         // Individual scale weights — prefer StateManager (already cumulative-adjusted by setCurrentMobileWeight).
         // Fall back to derived split only when StateManager has not yet populated the scale weights.
-        const scaleAWeight = scaleStatus.scaleA?.weight ?? Math.round(currentWeight / 2);
-        const scaleBWeight = scaleStatus.scaleB?.weight ?? (currentWeight - scaleAWeight);
+        // Use != null to avoid treating 0 as missing (0 is valid between axles).
+        const scaleAWeight = scaleStatus.scaleA?.weight != null ? scaleStatus.scaleA.weight : Math.round(currentWeight / 2);
+        const scaleBWeight = scaleStatus.scaleB?.weight != null ? scaleStatus.scaleB.weight : (currentWeight - scaleAWeight);
 
         // Debug logging
         console.log(`[API /weights] Mobile mode - currentWeight: ${currentWeight}, capturedGvw: ${capturedGvw}, runningGvw: ${runningGvw}, simulation: ${simulation}`);
@@ -503,8 +504,11 @@ class ApiOutput extends EventEmitter {
               console.log('[ApiOutput] Weighing session reset after auto-weigh attempt');
             });
         } else if (isComplete && BackendClient.hasSyncedTransaction()) {
-          StateManager.resetMobileSession();
-          console.log('[ApiOutput] All axles captured but frontend has synced transaction - session reset, no autoweigh');
+          // Frontend owns the transaction — do NOT reset session here.
+          // Resetting prematurely clears mobileState.axles and cumulativeBaseOffset,
+          // which breaks the cumulative subtraction for any subsequent MCGS readings.
+          // The frontend will explicitly call 'weights-captured' or 'reset-session' when done.
+          console.log('[ApiOutput] All axles captured but frontend has synced transaction - awaiting frontend reset');
         }
 
         res.json({
