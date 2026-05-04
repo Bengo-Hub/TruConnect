@@ -1759,38 +1759,28 @@ setTimeout(() => {
   }
 }, 5000); // 5 seconds after startup
 
-// Auto-start registration on Windows
+// Auto-start registration on Windows.
+// Uses Electron's native API so the registry entry always points to the
+// installed TruConnect.exe, not the electron.exe shim.
 if (process.platform === 'win32') {
-  const AutoLaunch = require('auto-launch');
-
-  const autoLauncher = new AutoLaunch({
-    name: 'TruConnect',
-    path: process.execPath,
-    isHidden: false
-  });
-
-  // Register for auto-start
-  autoLauncher.enable().catch(err => {
+  try {
+    app.setLoginItemSettings({ openAtLogin: true, name: 'TruConnect' });
+  } catch (err) {
     log.warn('Failed to register auto-start:', err);
-  });
+  }
 
-  // IPC handler to manage auto-start
-  ipcMain.handle('autostart:toggle', async (event, enabled) => {
+  ipcMain.handle('autostart:toggle', (event, enabled) => {
     try {
-      if (enabled) {
-        await autoLauncher.enable();
-      } else {
-        await autoLauncher.disable();
-      }
+      app.setLoginItemSettings({ openAtLogin: enabled, name: 'TruConnect' });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
   });
 
-  ipcMain.handle('autostart:is-enabled', async () => {
+  ipcMain.handle('autostart:is-enabled', () => {
     try {
-      return await autoLauncher.isEnabled();
+      return app.getLoginItemSettings().openAtLogin;
     } catch (error) {
       return false;
     }
