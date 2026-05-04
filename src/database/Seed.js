@@ -18,7 +18,10 @@ const defaults = require('../config/defaults');
 // v2.1.0: New input configuration structure with separate scale/indicator configs
 // v2.2.0: Top-level rdu config for RDUCommunicator (multi-deck USR panel routing),
 //         all 4 decks enabled by default, indicator multiDeck flag added
-const SEED_VERSION = '2.2.0';
+// v2.3.0: Indicator serial baud corrected to 9600 (indicators run at 9600, not 1200).
+//         ZM query changed to ENQ (0x05). RDU panels remain at 1200 baud.
+//         RDU format corrected: ={WEIGHT}= (no $ prefix for KELI).
+const SEED_VERSION = '2.3.0';
 
 const DEFAULT_ADMIN = {
   email: 'admin@codevertexitsolutions.com',

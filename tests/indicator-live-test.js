@@ -46,7 +46,7 @@ function parseArgs() {
     protocol: 'ZM',
     input:    'serial',
     port:     process.env.INDICATOR_PORT     || 'COM1',
-    baud:     parseInt(process.env.INDICATOR_BAUD || '1200', 10),
+    baud:     parseInt(process.env.INDICATOR_BAUD || '9600', 10),  // indicators run at 9600 baud
     tcpHost:  process.env.INDICATOR_HOST     || '192.168.1.100',
     tcpPort:  parseInt(process.env.INDICATOR_TCP_PORT || '4001', 10),
     usrIp:    process.env.USR_IP             || '192.168.42.200',
@@ -484,17 +484,21 @@ function loadParser(protocol) {
 }
 
 // ─── Query command per protocol ───────────────────────────────────────────────
+// ENQ (0x05) is used for ZM, CARDINAL2, 1310 — matches the working reference sample code.
+// CARDINAL sends data continuously and needs no query.
 function getQueryCommand(protocol) {
   switch (protocol) {
-    case 'ZM':        return Buffer.from('W');
-    case 'CARDINAL':  return null;
-    case 'CARDINAL2':
-    case '1310':      return Buffer.from([0x05]);
+    case 'ZM':        return Buffer.from([0x05]);    // ENQ — confirmed working with Zedem 510
+    case 'CARDINAL':  return null;                   // continuous output, no query needed
+    case 'CARDINAL2': return Buffer.from([0x05]);    // ENQ
+    case '1310':      return Buffer.from([0x05]);    // ENQ
     default:          return null;
   }
 }
 
 // ─── RDU formatter ───────────────────────────────────────────────────────────
+// Format: raw kg → digits reversed → pad to 8 chars → wrap in =…=
+// Example: 1100 kg → "0011" → "00110000" → "=00110000="
 function formatRdu(weightKg) {
   const reversed = Math.abs(Math.round(weightKg)).toString().split('').reverse().join('');
   return `=${reversed.padEnd(8, '0')}=`;
@@ -531,8 +535,11 @@ function printStatus(rawLine) {
   console.log('══════════════════════════════════════════════════════════════');
   console.log('  TruConnect — Indicator Live Test');
   console.log('══════════════════════════════════════════════════════════════');
-  console.log(`  Protocol : ${opts.protocol}   Input: ${opts.input}   ${opts.input === 'serial' ? opts.port + ' @ ' + opts.baud + ' bps' : opts.tcpHost + ':' + opts.tcpPort}`);
-  console.log(`  USR RDU  : ${opts.noRdu ? 'DISABLED (--no-rdu)' : opts.usrIp}   Parses: ${parseCount}   Sends: ${sendCount}`);
+  const inputStr = opts.input === 'serial'
+    ? `${opts.port} @ ${opts.baud} bps (indicator baud)`
+    : `${opts.tcpHost}:${opts.tcpPort}`;
+  console.log(`  Protocol : ${opts.protocol}   Input: ${opts.input}   ${inputStr}`);
+  console.log(`  USR RDU  : ${opts.noRdu ? 'DISABLED (--no-rdu)' : opts.usrIp + ' (RDU panels @ 1200 bps)'}   Parses: ${parseCount}   Sends: ${sendCount}`);
   console.log(`  Time     : ${ts}`);
   console.log(`  Raw      : "${rawLine}"`);
   console.log('──────────────────────────────────────────────────────────────');
@@ -587,11 +594,24 @@ function setupRduConnections() {
 
 function sendToRdus() {
   if (opts.noRdu) return;
-  const weights = [deckWeights[1], deckWeights[2], deckWeights[3], deckWeights[4], deckWeights.gvw];
+  const weights    = [deckWeights[1], deckWeights[2], deckWeights[3], deckWeights[4], deckWeights.gvw];
+  const deckLabels = ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'GVW'];
+  const ts = new Date().toISOString().slice(11, 23);
   weights.forEach((w, i) => {
     const conn = rduConns[i];
-    if (!conn || !conn.connected || !conn.socket?.writable) return;
-    conn.socket.write(formatRdu(w), err => { if (!err) sendCount++; });
+    if (!conn || !conn.connected || !conn.socket?.writable) {
+      if (conn) console.log(`[${ts}] ⚠ RDU ${deckLabels[i]} (port ${conn.port}): not connected — skipping`);
+      return;
+    }
+    const msg = formatRdu(w);
+    console.log(`[${ts}] 📤 RDU→ ${deckLabels[i]} (USR port ${conn.port}): ${w} kg  →  "${msg}"`);
+    conn.socket.write(msg, err => {
+      if (!err) {
+        sendCount++;
+      } else {
+        console.error(`[${ts}] ❌ RDU send error ${deckLabels[i]} port ${conn.port}: ${err.message}`);
+      }
+    });
   });
 }
 
@@ -599,6 +619,15 @@ function sendToRdus() {
 let buffer = '';
 
 function handleData(data, parser) {
+  const ts = new Date().toISOString().slice(11, 23);
+
+  // Show every raw chunk received (hex + printable) — critical for baud-rate debugging
+  const hex = Buffer.from(data).toString('hex').match(/.{2}/g)?.join(' ') ?? '';
+  const printable = data.toString().replace(/[\x00-\x1F\x7F]/g, c =>
+    c === '\r' ? '↵' : c === '\n' ? '↩' : `[${c.charCodeAt(0).toString(16).padStart(2,'0')}]`
+  );
+  console.log(`[${ts}] 📡 RX ${data.length}b: "${printable}"  hex: ${hex}`);
+
   buffer += data.toString();
   const lines = buffer.split(/\r\n|\r|\n/);
   buffer = lines.pop();
@@ -607,9 +636,22 @@ function handleData(data, parser) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
+    console.log(`[${ts}] 📥 Weight string: "${trimmed}"`);
+
     const result  = parser.parse(trimmed);
     const results = Array.isArray(result) ? result : (result ? [result] : []);
-    if (results.length === 0) continue;
+    if (results.length === 0) {
+      console.log(`[${ts}] ⚠ No parse match — "${trimmed}" is not a recognised weight string`);
+      continue;
+    }
+
+    // Log each parsed deck weight and its RDU format
+    results.forEach(r => {
+      const label = r.deck > 0 ? `Deck ${r.deck}` : 'GVW';
+      const status = r.motion ? 'MOTION' : r.overload ? 'OVERLOAD' : r.underload ? 'UNDERLOAD' : 'STABLE';
+      const rduStr = formatRdu(r.weight);
+      console.log(`[${ts}] ✅ ${label}: ${r.weight} kg [${status}]  →  RDU: "${rduStr}"`);
+    });
 
     updateDeckWeights(results);
     sendToRdus();
@@ -643,14 +685,27 @@ async function startSerial(parser) {
 
       const queryCmd = getQueryCommand(opts.protocol);
       let queryTimer = null;
+      let querySentCount = 0;
+      
       if (queryCmd) {
+        const queryDesc = `0x05 (ENQ)`;
+        console.log(`  📤 Query: sending ${queryDesc} every 1000ms (${opts.protocol} protocol)`);
+        
         queryTimer = setInterval(() => {
           port.write(queryCmd, writeErr => {
-            if (writeErr) console.warn(`  ⚠ Query error: ${writeErr.message}`);
+            if (!writeErr) {
+              querySentCount++;
+              if (querySentCount === 1 || querySentCount % 20 === 0) {
+                const ts = new Date().toISOString().slice(11, 23);
+                        console.log(`[${ts}] 📤 Query sent: ENQ (0x05)  count=${querySentCount}`);
+              }
+            } else {
+              console.warn(`  ⚠ Query error: ${writeErr.message}`);
+            }
           });
         }, 1000);
       } else {
-        console.log('  Continuous output mode — no query command needed');
+        console.log(`  📡 Continuous output mode: ${opts.protocol} protocol — no query command needed`);
       }
 
       port.on('data',  data => handleData(data, parser));
@@ -676,8 +731,24 @@ async function startTcp(parser) {
       console.log(`✅ TCP connected to ${opts.tcpHost}:${opts.tcpPort}`);
       const queryCmd = getQueryCommand(opts.protocol);
       if (queryCmd) {
-        const queryTimer = setInterval(() => socket.write(queryCmd), 1000);
+        const queryDesc = `0x05 (ENQ)`;
+        console.log(`  📤 Query mode: ${opts.protocol} protocol — sending ${queryDesc} every 1000ms via TCP`);
+        
+        let querySentCount = 0;
+        const queryTimer = setInterval(() => {
+          socket.write(queryCmd, writeErr => {
+            if (!writeErr) {
+              querySentCount++;
+              if (querySentCount === 1 || querySentCount % 20 === 0) {
+                const ts = new Date().toISOString().slice(11, 23);
+                console.log(`[${ts}] 📤 TCP Query sent (${opts.protocol}): count=${querySentCount}`);
+              }
+            }
+          });
+        }, 1000);
         socket.once('close', () => clearInterval(queryTimer));
+      } else {
+        console.log(`  📡 Continuous output mode: ${opts.protocol} protocol — no query needed via TCP`);
       }
     });
   };

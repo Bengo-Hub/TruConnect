@@ -537,6 +537,51 @@
       word-break: break-all;
     }
 
+    /* RDU connection sub-tab buttons */
+    .rdu-tab-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .btn-rdu-tab {
+      flex: 1;
+      padding: 10px 16px;
+      background: var(--card-bg);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-rdu-tab:hover {
+      border-color: var(--primary);
+      color: var(--text);
+    }
+
+    .btn-rdu-tab.active {
+      background: rgba(212, 175, 55, 0.15);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .usr-ip-block {
+      background: rgba(33, 150, 243, 0.08);
+      border: 1px solid rgba(33, 150, 243, 0.25);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+
+    .usr-ip-block label { color: var(--info); font-weight: 500; }
+
     /* Panel configuration items */
     .panel-item {
       background: rgba(0, 0, 0, 0.2);
@@ -1010,7 +1055,10 @@
               <div class="form-group">
                 <label for="indicator-baud">Baud Rate</label>
                 <select id="indicator-baud" class="form-control">
-                  <option value="9600" selected>9600</option>
+                  <option value="1200">1200</option>
+                  <option value="2400">2400</option>
+                  <option value="4800">4800</option>
+                  <option value="9600" selected>9600 (indicator standard)</option>
                   <option value="19200">19200</option>
                   <option value="38400">38400</option>
                   <option value="57600">57600</option>
@@ -1117,7 +1165,8 @@
           <div class="form-section">
             <h3 class="form-section-title"><i class="fas fa-tv"></i> RDU Display Configuration</h3>
             <p style="color: var(--text-secondary); margin-bottom: 20px;">
-              Configure a Remote Display Unit (RDU) for showing weights. Only one RDU device can be active at a time.
+              Configure Remote Display Units (RDUs) for showing deck weights. Each deck gets its own panel.
+              <br><small>Note: Indicator serial baud is <strong>9600</strong>. RDU panel serial baud is <strong>1200</strong> — these are independent.</small>
             </p>
 
             <!-- RDU Enable Toggle -->
@@ -1136,6 +1185,8 @@
 
             <!-- RDU Config (shown when enabled) -->
             <div id="rdu-config" style="display: none;">
+
+              <!-- Model + Name -->
               <div class="form-row">
                 <div class="form-group">
                   <label for="rdu-model">RDU Model</label>
@@ -1147,58 +1198,73 @@
                 </div>
                 <div class="form-group">
                   <label for="rdu-name">Display Name</label>
-                  <input type="text" id="rdu-name" class="form-control" placeholder="e.g., Main RDU">
+                  <input type="text" id="rdu-name" class="form-control" placeholder="e.g., Weighbridge RDU">
                 </div>
               </div>
 
+              <!-- Panel count + Message Format -->
               <div class="form-row">
-                <div class="form-group">
-                  <label for="rdu-connection-type">Connection Type</label>
-                  <select id="rdu-connection-type" class="form-control">
-                    <option value="serial">Direct Serial (COM Port)</option>
-                    <option value="usr">Network (USR-TCP232)</option>
-                  </select>
-                </div>
                 <div class="form-group">
                   <label for="rdu-panel-count">Number of Panels</label>
                   <select id="rdu-panel-count" class="form-control">
                     <option value="1">1 (GVW only)</option>
-                    <option value="2">2 (Deck 1, GVW)</option>
-                    <option value="4">4 (Deck 1-4)</option>
-                    <option value="5" selected>5 (Deck 1-4 + GVW)</option>
+                    <option value="2">2 (Deck 1 + GVW)</option>
+                    <option value="4">4 (Deck 1–4)</option>
+                    <option value="5" selected>5 (Deck 1–4 + GVW)</option>
                   </select>
                 </div>
-              </div>
-
-              <!-- USR Network Config (shown when connection type is USR) -->
-              <div id="usr-config" style="display: none;">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label for="usr-ip">USR Device IP</label>
-                    <input type="text" id="usr-ip" class="form-control" placeholder="192.168.4.93">
-                  </div>
-                  <div class="form-group">
-                    <label for="usr-port">USR Device Port</label>
-                    <input type="number" id="usr-port" class="form-control" value="4196">
-                  </div>
+                <div class="form-group">
+                  <label for="rdu-format">Message Format
+                    <small>Use {WEIGHT} — e.g., ={WEIGHT}= for KELI</small>
+                  </label>
+                  <input type="text" id="rdu-format" class="form-control" value="={WEIGHT}=" placeholder="={WEIGHT}=">
                 </div>
               </div>
 
-              <!-- Message Format -->
-              <div class="form-group" id="format-group">
-                <label for="rdu-format">Message Format
-                  <small>Use {WEIGHT} for weight value (e.g., $={WEIGHT}=)</small>
-                </label>
-                <input type="text" id="rdu-format" class="form-control" value="$={WEIGHT}=" placeholder="$={WEIGHT}=">
+              <!-- Connection Sub-tabs -->
+              <div class="form-group">
+                <label style="margin-bottom: 10px; display: block;">Connection Type</label>
+                <div class="rdu-tab-buttons">
+                  <button type="button" class="btn-rdu-tab active" data-rdu-tab="serial">
+                    <i class="fas fa-plug"></i> Direct Serial (COM Port)
+                  </button>
+                  <button type="button" class="btn-rdu-tab" data-rdu-tab="usr">
+                    <i class="fas fa-network-wired"></i> Network Device (USR IOT)
+                  </button>
+                </div>
               </div>
 
               <!-- Panel Configuration -->
               <div class="form-group">
-                <label style="margin-bottom: 15px; display: block;">Panel Configuration</label>
-                <div id="panel-configs">
-                  <!-- Panels will be generated dynamically -->
+                <label style="margin-bottom: 12px; display: block;">Panel Configuration</label>
+
+                <!-- Serial panels (direct COM port per RDU) -->
+                <div id="rdu-serial-panels">
+                  <!-- generated dynamically -->
+                </div>
+
+                <!-- USR panels (TCP port per RDU on the USR device) -->
+                <div id="rdu-usr-panels" style="display: none;">
+                  <div class="usr-ip-block">
+                    <div class="form-row" style="margin-bottom: 0;">
+                      <div class="form-group" style="margin-bottom: 0;">
+                        <label for="usr-ip"><i class="fas fa-network-wired"></i> USR Device IP Address</label>
+                        <input type="text" id="usr-ip" class="form-control" placeholder="192.168.42.200" value="192.168.42.200">
+                      </div>
+                      <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
+                        <small style="color: var(--text-secondary); line-height: 1.5;">
+                          Each panel connects to a unique TCP port on the USR device.<br>
+                          The USR bridges TCP → Serial to each physical RDU (at 1200 baud).
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="rdu-usr-panel-list">
+                    <!-- generated dynamically -->
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
@@ -1563,14 +1629,12 @@
     function updateInputSourceUI() {
       const source = activeSource.value;
 
-      // Hide all config sections
-      pawConfig.style.display = 'none';
-      haenniConfig.style.display = 'none';
-      mcgsConfig.style.display = 'none';
+      pawConfig.style.display       = 'none';
+      haenniConfig.style.display    = 'none';
+      mcgsConfig.style.display      = 'none';
       indicatorConfig.style.display = 'none';
-      customConfig.style.display = 'none';
+      customConfig.style.display    = 'none';
 
-      // Show appropriate config
       if (source === 'paw') {
         pawConfig.style.display = 'block';
       } else if (source === 'haenni') {
@@ -1579,14 +1643,19 @@
         mcgsConfig.style.display = 'block';
       } else if (source.startsWith('indicator_')) {
         indicatorConfig.style.display = 'block';
-        // Set default query command based on protocol
+
+        // All indicators use 9600 baud for serial communication
+        document.getElementById('indicator-baud').value = '9600';
+
+        // ENQ (0x05) triggers weight output on ZM, Cardinal2, and 1310.
+        // Cardinal sends continuously — no query needed.
         const queryDefaults = {
-          'indicator_zm': 'W',
-          'indicator_cardinal': '',  // Continuous output
-          'indicator_cardinal2': '\x05',  // ENQ
-          'indicator_1310': '\x05'  // ENQ
+          'indicator_zm':       '\x05',  // ENQ — confirmed working with Zedem 510
+          'indicator_cardinal': '',       // continuous output, no query
+          'indicator_cardinal2':'\x05',  // ENQ
+          'indicator_1310':     '\x05'   // ENQ
         };
-        document.getElementById('indicator-query').value = queryDefaults[source] || 'W';
+        document.getElementById('indicator-query').value = queryDefaults[source] ?? '\x05';
       } else if (source === 'custom') {
         customConfig.style.display = 'block';
       }
@@ -1603,191 +1672,194 @@
 
     // ============ RDU Configuration ============
 
-    const rduEnabled = document.getElementById('rdu-enabled');
-    const rduConfig = document.getElementById('rdu-config');
-    const rduConnectionType = document.getElementById('rdu-connection-type');
-    const usrConfig = document.getElementById('usr-config');
+    const rduEnabled    = document.getElementById('rdu-enabled');
+    const rduConfig     = document.getElementById('rdu-config');
     const rduPanelCount = document.getElementById('rdu-panel-count');
-    const panelConfigsContainer = document.getElementById('panel-configs');
-    const rduModel = document.getElementById('rdu-model');
-    const rduFormat = document.getElementById('rdu-format');
+    const rduModel      = document.getElementById('rdu-model');
+    const rduFormat     = document.getElementById('rdu-format');
 
-    // RDU model formats
+    // KELI reversed format — no $ prefix. RDU baud is always 1200 (separate from indicator 9600).
     const RDU_FORMATS = {
-      'KELI': '$={WEIGHT}=',
-      'YAOHUA': 'W{WEIGHT}',
-      'GENERIC': '$={WEIGHT}='
+      'KELI':    '={WEIGHT}=',
+      'YAOHUA':  'W{WEIGHT}',
+      'GENERIC': '={WEIGHT}='
     };
 
-    // Toggle RDU config visibility
+    // Default USR TCP ports (one per panel/deck, matching USR device configuration)
+    const DEFAULT_USR_PORTS = [20, 21, 22, 23, 24];
+
+    let rduActiveTab = 'serial'; // 'serial' | 'usr'
+
+    // Enable/disable RDU config block
     rduEnabled.addEventListener('change', () => {
       rduConfig.style.display = rduEnabled.checked ? 'block' : 'none';
-      if (rduEnabled.checked) {
-        generatePanelConfigs();
-      }
+      if (rduEnabled.checked) generatePanelConfigs();
     });
 
-    // Toggle USR config visibility
-    rduConnectionType.addEventListener('change', () => {
-      usrConfig.style.display = rduConnectionType.value === 'usr' ? 'block' : 'none';
-      generatePanelConfigs();
-    });
-
-    // Update format when model changes
+    // Model change → update format hint
     rduModel.addEventListener('change', () => {
-      rduFormat.value = RDU_FORMATS[rduModel.value] || RDU_FORMATS['GENERIC'];
+      rduFormat.value = RDU_FORMATS[rduModel.value] || '={WEIGHT}=';
     });
 
-    // Generate panel configs when count changes
+    // Panel count change → regenerate panels
     rduPanelCount.addEventListener('change', generatePanelConfigs);
 
-    function generatePanelConfigs() {
-      const count = parseInt(rduPanelCount.value) || 5;
-      const connectionType = rduConnectionType.value;
-      const panelLabels = ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'GVW'];
-
-      // Map panel count to which panels to show
-      let panelsToShow = [];
-      if (count === 1) panelsToShow = [4]; // GVW only
-      else if (count === 2) panelsToShow = [0, 4]; // Deck 1, GVW
-      else if (count === 4) panelsToShow = [0, 1, 2, 3]; // Deck 1-4
-      else panelsToShow = [0, 1, 2, 3, 4]; // All 5
-
-      let html = '';
-      panelsToShow.forEach((panelIndex, i) => {
-        const label = panelLabels[panelIndex];
-        if (connectionType === 'serial') {
-          html += `
-            <div class="panel-item" data-panel-index="${panelIndex}">
-              <div class="panel-item-header">
-                <span class="panel-item-title">${label} Panel</span>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>COM Port</label>
-                  <input type="text" class="form-control panel-com" placeholder="COM${i + 1}" value="COM${i + 1}">
-                </div>
-                <div class="form-group">
-                  <label>Baud Rate</label>
-                  <select class="form-control panel-baud">
-                    <option value="1200" selected>1200</option>
-                    <option value="2400">2400</option>
-                    <option value="9600">9600</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          `;
-        } else {
-          // USR mode - panels share the USR device connection
-          html += `
-            <div class="panel-item" data-panel-index="${panelIndex}">
-              <div class="panel-item-header">
-                <span class="panel-item-title">${label} Panel</span>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Channel/Port Index</label>
-                  <input type="number" class="form-control panel-channel" value="${i}" min="0" max="7">
-                </div>
-                <div class="form-group">
-                  <label>Baud Rate</label>
-                  <select class="form-control panel-baud">
-                    <option value="1200" selected>1200</option>
-                    <option value="2400">2400</option>
-                    <option value="9600">9600</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          `;
-        }
+    // Sub-tab switching (Serial ↔ USR)
+    document.querySelectorAll('.btn-rdu-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-rdu-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        rduActiveTab = btn.dataset.rduTab;
+        document.getElementById('rdu-serial-panels').style.display = rduActiveTab === 'serial' ? 'block' : 'none';
+        document.getElementById('rdu-usr-panels').style.display    = rduActiveTab === 'usr'    ? 'block' : 'none';
+        generatePanelConfigs();
       });
+    });
 
-      panelConfigsContainer.innerHTML = html;
+    function generatePanelConfigs() {
+      const count  = parseInt(rduPanelCount.value) || 5;
+      const labels = ['Deck 1', 'Deck 2', 'Deck 3', 'Deck 4', 'GVW'];
+
+      let panelsToShow;
+      if (count === 1)      panelsToShow = [4];
+      else if (count === 2) panelsToShow = [0, 4];
+      else if (count === 4) panelsToShow = [0, 1, 2, 3];
+      else                  panelsToShow = [0, 1, 2, 3, 4];
+
+      const baudOptions = `
+        <option value="1200" selected>1200 (RDU standard)</option>
+        <option value="2400">2400</option>
+        <option value="4800">4800</option>
+        <option value="9600">9600</option>
+      `;
+
+      // ── Serial panels ──
+      let serialHtml = '';
+      panelsToShow.forEach((idx, i) => {
+        serialHtml += `
+          <div class="panel-item" data-panel-index="${idx}" data-panel-type="serial">
+            <div class="panel-item-header">
+              <span class="panel-item-title">${labels[idx]} Panel</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>COM Port</label>
+                <input type="text" class="form-control panel-com" placeholder="COM${i + 1}" value="COM${i + 1}">
+              </div>
+              <div class="form-group">
+                <label>Baud Rate <small>(RDU device — typically 1200)</small></label>
+                <select class="form-control panel-baud">${baudOptions}</select>
+              </div>
+            </div>
+          </div>`;
+      });
+      document.getElementById('rdu-serial-panels').innerHTML = serialHtml;
+
+      // ── USR panels ──
+      let usrHtml = '';
+      panelsToShow.forEach((idx, i) => {
+        const defaultPort = DEFAULT_USR_PORTS[idx] ?? (20 + idx);
+        usrHtml += `
+          <div class="panel-item" data-panel-index="${idx}" data-panel-type="usr">
+            <div class="panel-item-header">
+              <span class="panel-item-title">${labels[idx]} Panel</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>USR TCP Port <small>(unique port per RDU on USR device)</small></label>
+                <input type="number" class="form-control panel-usr-port" value="${defaultPort}" min="1" max="65535">
+              </div>
+              <div class="form-group">
+                <label>Serial Baud Rate <small>(USR → RDU, typically 1200)</small></label>
+                <select class="form-control panel-baud">${baudOptions}</select>
+              </div>
+            </div>
+          </div>`;
+      });
+      document.getElementById('rdu-usr-panel-list').innerHTML = usrHtml;
     }
 
-    // Get RDU config from form
+    // Collect RDU config from form
     function getRduConfig() {
-      if (!rduEnabled.checked) {
-        return { enabled: false };
-      }
+      if (!rduEnabled.checked) return { enabled: false };
 
       const panels = [];
-      document.querySelectorAll('.panel-item').forEach(item => {
-        const panelIndex = parseInt(item.dataset.panelIndex);
-        const panel = {
-          deckIndex: panelIndex,
-          baudRate: parseInt(item.querySelector('.panel-baud').value)
-        };
 
-        if (rduConnectionType.value === 'serial') {
-          panel.type = 'serial';
-          panel.port = item.querySelector('.panel-com').value;
-        } else {
-          panel.type = 'usr';
-          panel.channel = parseInt(item.querySelector('.panel-channel').value);
-        }
-
-        panels.push(panel);
-      });
+      if (rduActiveTab === 'serial') {
+        document.querySelectorAll('#rdu-serial-panels .panel-item').forEach(item => {
+          panels.push({
+            deckIndex: parseInt(item.dataset.panelIndex),
+            type:      'serial',
+            port:      item.querySelector('.panel-com').value,
+            baudRate:  parseInt(item.querySelector('.panel-baud').value) || 1200
+          });
+        });
+      } else {
+        document.querySelectorAll('#rdu-usr-panel-list .panel-item').forEach(item => {
+          panels.push({
+            deckIndex: parseInt(item.dataset.panelIndex),
+            type:      'usr',
+            usrPort:   parseInt(item.querySelector('.panel-usr-port').value),
+            baudRate:  parseInt(item.querySelector('.panel-baud').value) || 1200
+          });
+        });
+      }
 
       return {
-        enabled: true,
-        model: rduModel.value,
-        name: document.getElementById('rdu-name').value,
-        connectionType: rduConnectionType.value,
-        format: rduFormat.value,
-        usr: rduConnectionType.value === 'usr' ? {
-          ip: document.getElementById('usr-ip').value,
-          port: parseInt(document.getElementById('usr-port').value) || 4196
-        } : null,
-        panels: panels
+        enabled:        true,
+        model:          rduModel.value,
+        name:           document.getElementById('rdu-name').value,
+        connectionType: rduActiveTab,
+        format:         rduFormat.value,
+        usr: rduActiveTab === 'usr'
+          ? { ip: document.getElementById('usr-ip').value }
+          : null,
+        panels
       };
     }
 
-    // Populate RDU config from settings
+    // Populate RDU config from saved settings
     function populateRduConfig(rdu) {
       if (!rdu) return;
 
       rduEnabled.checked = rdu.enabled || false;
       rduConfig.style.display = rdu.enabled ? 'block' : 'none';
+      if (!rdu.enabled) return;
 
-      if (rdu.enabled) {
-        rduModel.value = rdu.model || 'KELI';
-        document.getElementById('rdu-name').value = rdu.name || '';
-        rduConnectionType.value = rdu.connectionType || 'serial';
-        rduFormat.value = rdu.format || RDU_FORMATS[rdu.model] || '$={WEIGHT}=';
+      rduModel.value = rdu.model || 'KELI';
+      document.getElementById('rdu-name').value = rdu.name || '';
+      rduFormat.value = rdu.format || RDU_FORMATS[rdu.model] || '={WEIGHT}=';
 
-        usrConfig.style.display = rdu.connectionType === 'usr' ? 'block' : 'none';
-        if (rdu.usr) {
-          document.getElementById('usr-ip').value = rdu.usr.ip || '';
-          document.getElementById('usr-port').value = rdu.usr.port || 4196;
-        }
+      const panelCount = rdu.panels?.length || 5;
+      rduPanelCount.value = panelCount;
 
-        // Set panel count based on number of panels
-        const panelCount = rdu.panels?.length || 5;
-        rduPanelCount.value = panelCount;
+      // Switch to saved connection sub-tab
+      const connType = rdu.connectionType || 'serial';
+      rduActiveTab = connType;
+      document.querySelectorAll('.btn-rdu-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.rduTab === connType);
+      });
+      document.getElementById('rdu-serial-panels').style.display = connType === 'serial' ? 'block' : 'none';
+      document.getElementById('rdu-usr-panels').style.display    = connType === 'usr'    ? 'block' : 'none';
 
-        // Generate panel configs then populate
-        generatePanelConfigs();
+      generatePanelConfigs();
 
-        // Populate panel values
-        if (rdu.panels) {
-          rdu.panels.forEach(panel => {
-            const item = document.querySelector(`.panel-item[data-panel-index="${panel.deckIndex}"]`);
-            if (item) {
-              item.querySelector('.panel-baud').value = panel.baudRate || 1200;
-              if (panel.type === 'serial') {
-                const comInput = item.querySelector('.panel-com');
-                if (comInput) comInput.value = panel.port || '';
-              } else {
-                const channelInput = item.querySelector('.panel-channel');
-                if (channelInput) channelInput.value = panel.channel || 0;
-              }
-            }
-          });
-        }
+      if (rdu.usr?.ip) document.getElementById('usr-ip').value = rdu.usr.ip;
+
+      if (rdu.panels) {
+        rdu.panels.forEach(panel => {
+          const sel = connType === 'serial'
+            ? `#rdu-serial-panels .panel-item[data-panel-index="${panel.deckIndex}"]`
+            : `#rdu-usr-panel-list .panel-item[data-panel-index="${panel.deckIndex}"]`;
+          const item = document.querySelector(sel);
+          if (!item) return;
+          if (panel.baudRate) item.querySelector('.panel-baud').value = panel.baudRate;
+          if (connType === 'serial' && panel.port) {
+            item.querySelector('.panel-com').value = panel.port;
+          } else if (connType === 'usr' && panel.usrPort) {
+            item.querySelector('.panel-usr-port').value = panel.usrPort;
+          }
+        });
       }
     }
 

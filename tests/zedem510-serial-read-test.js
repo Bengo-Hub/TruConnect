@@ -4,10 +4,14 @@
  * Live test: reads weight data from a Zedem 510 indicator via serial port,
  * parses multi-deck strings, and logs the formatted RDU output for each deck.
  *
+ * Indicator baud rate : 9600 (indicators always run at 9600)
+ * RDU display baud    : 1200 (RDU panels run at 1200 — separate from indicator)
+ * Query command       : ENQ 0x05 (same as working sample code)
+ *
  * Usage:
- *   node zedem510-serial-read-test.js                    # live on COM1 @ 1200 baud
+ *   node zedem510-serial-read-test.js                    # live on COM1 @ 9600 baud
  *   node zedem510-serial-read-test.js COM3 9600          # live on COM3 @ 9600 baud
- *   PORT=COM4 BAUD=1200 node zedem510-serial-read-test.js
+ *   PORT=COM4 BAUD=9600 node zedem510-serial-read-test.js
  *   node zedem510-serial-read-test.js --parser-only      # no hardware needed
  *
  * External dependencies: serialport (npm install serialport)
@@ -21,8 +25,9 @@ const args        = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const flags       = process.argv.slice(2).filter(a => a.startsWith('--'));
 const PARSER_ONLY = flags.includes('--parser-only');
 const SERIAL_PORT = args[0] || process.env.PORT  || 'COM1';
-const BAUD_RATE   = parseInt(args[1] || process.env.BAUD || '1200', 10);
+const BAUD_RATE   = parseInt(args[1] || process.env.BAUD || '9600', 10);  // indicators run at 9600
 const QUERY_MS    = parseInt(process.env.QUERY_MS || '1000', 10);
+const QUERY_CMD   = Buffer.from([0x05]);  // ENQ byte — triggers weight output (matches working sample)
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Inlined parser base class
@@ -109,8 +114,13 @@ class ZmParser extends ParserInterface {
 
 // ─── RDU formatter ───────────────────────────────────────────────────────────
 function formatRdu(weightKg) {
-  const reversed = Math.abs(Math.round(weightKg)).toString().split('').reverse().join('');
-  return `=${reversed.padEnd(8, '0')}=`;
+  // Use 8888 as default test value if weight is zero
+  const displayWeight = weightKg === 0 ? 8888 : weightKg;
+  const reversed = Math.abs(Math.round(displayWeight)).toString().split('').reverse().join('');
+  const result = `=${reversed.padEnd(8, '0')}=`;
+  const testNote = weightKg === 0 ? ' [TEST DEFAULT: 8888]' : '';
+  console.log(`  → RDU format: ${weightKg} kg → ${displayWeight} kg → ${result}${testNote}`);
+  return result;
 }
 
 // ─── Pretty-print deck table ──────────────────────────────────────────────────
@@ -178,9 +188,11 @@ async function runLiveSerial() {
   console.log('\n══════════════════════════════════════════════════════════');
   console.log('  Zedem 510 — Live Serial Weight Reader');
   console.log('══════════════════════════════════════════════════════════');
-  console.log(`  Port     : ${SERIAL_PORT}`);
-  console.log(`  Baud     : ${BAUD_RATE} bps`);
-  console.log(`  Query    : 'W' every ${QUERY_MS}ms`);
+  console.log(`  Port       : ${SERIAL_PORT}`);
+  console.log(`  Baud       : ${BAUD_RATE} bps  (indicator serial baud — NOT the RDU baud)`);
+  console.log(`  Protocol   : ZM (Zedem 510)`);
+  console.log(`  Query Cmd  : ENQ 0x05 every ${QUERY_MS}ms`);
+  console.log(`  RDU baud   : 1200 bps  (separate — on USR device serial port to RDU display)`);
   console.log('  Press Ctrl+C to stop\n');
 
   const port = new SerialPort({
@@ -188,17 +200,27 @@ async function runLiveSerial() {
     dataBits: 8, parity: 'none', stopBits: 1, autoOpen: false
   });
 
+  let querySentCount = 0;
+
   port.open(err => {
     if (err) {
       console.error(`❌ Cannot open ${SERIAL_PORT}: ${err.message}`);
       console.error('   Check: port name, USB-serial driver, indicator power, cable');
       process.exit(1);
     }
-    console.log(`✅ ${SERIAL_PORT} opened — waiting for indicator data...\n`);
+    console.log(`✅ ${SERIAL_PORT} opened @ ${BAUD_RATE} bps — waiting for indicator data...\n`);
 
     const queryTimer = setInterval(() => {
-      port.write('W', writeErr => {
-        if (writeErr) console.warn(`  ⚠ Query write error: ${writeErr.message}`);
+      const ts = new Date().toISOString().slice(11, 23);
+      port.write(QUERY_CMD, writeErr => {
+        if (!writeErr) {
+          querySentCount++;
+          if (querySentCount === 1 || querySentCount % 30 === 0) {
+            console.log(`[${ts}] 📤 Query sent: ENQ (0x05) — count=${querySentCount}`);
+          }
+        } else {
+          console.warn(`[${ts}] ⚠ Query write error: ${writeErr.message}`);
+        }
       });
     }, QUERY_MS);
 
@@ -206,21 +228,42 @@ async function runLiveSerial() {
     let lastRaw = '';
 
     port.on('data', data => {
+      const ts = new Date().toISOString().slice(11, 23);
+      // Log every raw chunk (hex + printable) so we can see exactly what the indicator sends
+      const hex = Buffer.from(data).toString('hex').match(/.{2}/g)?.join(' ') ?? '';
+      const printable = data.toString().replace(/[\x00-\x1F\x7F]/g, c =>
+        c === '\r' ? '↵' : c === '\n' ? '↩' : `[${c.charCodeAt(0).toString(16).padStart(2,'0')}]`
+      );
+      console.log(`[${ts}] 📡 RX ${data.length}b: "${printable}"  hex: ${hex}`);
+
       buffer += data.toString();
       const lines = buffer.split(/\r\n|\r|\n/);
       buffer = lines.pop();
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed || trimmed === lastRaw) continue;
+        if (!trimmed) continue;
+        if (trimmed === lastRaw) {
+          console.log(`[${ts}] ↩ Duplicate line skipped: "${trimmed}"`);
+          continue;
+        }
         lastRaw = trimmed;
+
+        console.log(`[${ts}] 📥 Weight string from indicator: "${trimmed}"`);
 
         const result  = parser.parse(trimmed);
         const results = Array.isArray(result) ? result : (result ? [result] : []);
         if (results.length === 0) {
-          console.log(`  [raw] "${trimmed}" — no parse match`);
+          console.log(`[${ts}] ⚠ Parser: no match for "${trimmed}" — not a recognised ZM weight string`);
           continue;
         }
+
+        results.forEach(r => {
+          const label = r.deck > 0 ? `Deck ${r.deck}` : 'GVW';
+          const rduStr = formatRdu(r.weight);
+          console.log(`[${ts}] ✅ ${label}: ${r.weight} kg  →  RDU string: "${rduStr}"`);
+        });
+
         printDeckTable(results, trimmed);
       }
     });

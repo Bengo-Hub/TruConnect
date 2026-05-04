@@ -201,11 +201,11 @@ module.exports = {
       },
       serial: {
         port: 'COM1',
-        baudRate: 1200,                 // Zedem 510 baud rate
+        baudRate: 9600,                 // Indicators communicate at 9600 baud
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
-        queryCommand: 'W'               // ASCII 'W' triggers weight output
+        queryCommand: '\x05'            // ENQ (0x05) triggers weight output
       },
       tcp: {
         host: '192.168.1.100',          // Indicator IP or USR input port host
