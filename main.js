@@ -16,6 +16,26 @@ if (typeof electron === 'string' || !process.versions.electron) {
 }
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog } = electron;
 const path = require('path');
+const { exec } = require('child_process');
+
+// ─── Single-instance lock ────────────────────────────────────────────────────
+// Prevents a second TruConnect window from starting alongside a running one.
+// The second launch focuses the existing window and exits immediately.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  // A second launch was attempted — bring the existing window to the foreground
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
 let autoUpdater;
 try {
   autoUpdater = require('electron-updater').autoUpdater;

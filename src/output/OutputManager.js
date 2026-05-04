@@ -12,8 +12,37 @@
  * - Status/health checks and fallback polling via REST API
  */
 
+const { exec } = require('child_process');
 const EventBus = require('../core/EventBus');
 const StateManager = require('../core/StateManager');
+
+/**
+ * Kill any process holding the given TCP port so the port can be rebound.
+ * Used as a recovery path when a previous crashed instance still holds the port.
+ */
+function freePort(port) {
+  return new Promise(resolve => {
+    if (process.platform === 'win32') {
+      exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
+        if (err || !stdout) return resolve();
+        const pids = new Set();
+        for (const line of stdout.split('\n')) {
+          if (!line.includes('LISTENING')) continue;
+          const pid = line.trim().split(/\s+/).pop();
+          if (pid && pid !== '0') pids.add(pid);
+        }
+        if (pids.size === 0) return resolve();
+        exec(`taskkill /F /PID ${[...pids].join(' /PID ')}`, () => resolve());
+      });
+    } else {
+      exec(`lsof -ti:${port}`, (err, stdout) => {
+        if (err || !stdout) return resolve();
+        const pids = stdout.trim().split('\n').filter(Boolean);
+        exec(`kill -9 ${pids.join(' ')}`, () => resolve());
+      });
+    }
+  });
+}
 
 class OutputManager {
   constructor() {
@@ -134,15 +163,18 @@ class OutputManager {
   }
 
   /**
-   * Start WebSocket server
+   * Start WebSocket server.
+   * Frees the port first in case a crashed previous instance still holds it.
    */
   async startWebSocket() {
     const WebSocketOutput = require('./WebSocketOutput');
     const wsConfig = this.config.websocket || {};
+    const port = wsConfig.port || 3030;
 
-    const port = wsConfig.port || 3030; // Default port is 3030
+    await freePort(port);
+
     this.outputs.websocket = new WebSocketOutput({
-      port: port,
+      port,
       pingInterval: wsConfig.pingInterval || 30000,
       pingTimeout: wsConfig.pingTimeout || 5000
     });
@@ -152,20 +184,24 @@ class OutputManager {
   }
 
   /**
-   * Start API server
+   * Start API server.
+   * Frees the port first in case a crashed previous instance still holds it.
    */
   async startApi() {
     const ApiOutput = require('./ApiOutput');
     const apiConfig = this.config.api || {};
+    const port = apiConfig.port || 3031;
+
+    await freePort(port);
 
     this.outputs.api = new ApiOutput({
-      port: apiConfig.port || 3031,
+      port,
       host: apiConfig.host || '127.0.0.1',
       basePath: apiConfig.basePath || '/api/v1'
     });
 
     await this.outputs.api.start();
-    console.log(`API server started on ${apiConfig.host || '127.0.0.1'}:${apiConfig.port || 3031}`);
+    console.log(`API server started on ${apiConfig.host || '127.0.0.1'}:${port}`);
   }
 
   /**
