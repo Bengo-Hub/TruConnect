@@ -1,49 +1,119 @@
 /**
- * zedem510-serial-read-test.js
+ * zedem510-serial-read-test.js  — SELF-CONTAINED (no project dependencies)
  *
  * Live test: reads weight data from a Zedem 510 indicator via serial port,
  * parses multi-deck strings, and logs the formatted RDU output for each deck.
  *
- * By default this opens a REAL serial port and reads REAL indicator data.
- * Use --parser-only to skip hardware and validate the parser against example data.
- *
  * Usage:
- *   node tests/zedem510-serial-read-test.js                    # live on COM1 @ 1200 baud
- *   node tests/zedem510-serial-read-test.js COM3 9600          # live on COM3 @ 9600 baud
- *   PORT=COM4 BAUD=1200 node tests/zedem510-serial-read-test.js
- *   node tests/zedem510-serial-read-test.js --parser-only      # no hardware needed
+ *   node zedem510-serial-read-test.js                    # live on COM1 @ 1200 baud
+ *   node zedem510-serial-read-test.js COM3 9600          # live on COM3 @ 9600 baud
+ *   PORT=COM4 BAUD=1200 node zedem510-serial-read-test.js
+ *   node zedem510-serial-read-test.js --parser-only      # no hardware needed
  *
- * The script:
- *  1. Opens the serial port
- *  2. Sends 'W' query every second to prompt weight output (ZM protocol)
- *  3. Parses every response line through ZmParser
- *  4. Prints a live table of deck weights and their RDU-formatted strings
- *
- * Press Ctrl+C to stop.
+ * External dependencies: serialport (npm install serialport)
+ * Built-ins only otherwise — no project files required.
  */
 
 'use strict';
 
-const path = require('path');
+// ─── CLI args & env ──────────────────────────────────────────────────────────
+const args        = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const flags       = process.argv.slice(2).filter(a => a.startsWith('--'));
+const PARSER_ONLY = flags.includes('--parser-only');
+const SERIAL_PORT = args[0] || process.env.PORT  || 'COM1';
+const BAUD_RATE   = parseInt(args[1] || process.env.BAUD || '1200', 10);
+const QUERY_MS    = parseInt(process.env.QUERY_MS || '1000', 10);
 
-// ─── CLI args & env ─────────────────────────────────────────────────────────
-const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
-const flags = process.argv.slice(2).filter(a => a.startsWith('--'));
-
-const PARSER_ONLY  = flags.includes('--parser-only');
-const SERIAL_PORT  = args[0] || process.env.PORT  || 'COM1';
-const BAUD_RATE    = parseInt(args[1] || process.env.BAUD || '1200', 10);
-const QUERY_MS     = parseInt(process.env.QUERY_MS || '1000', 10);   // query interval
-
-// ─── RDU formatter (matches serialout.js KELI reversed format) ──────────────
-function formatRdu(weightKg) {
-  const str      = Math.abs(Math.round(weightKg)).toString();
-  const reversed = str.split('').reverse().join('');
-  const padded   = reversed.padEnd(8, '0');
-  return `=${padded}=`;
+// ════════════════════════════════════════════════════════════════════════════
+//  Inlined parser base class
+// ════════════════════════════════════════════════════════════════════════════
+class ParserInterface {
+  constructor(config = {}) {
+    this.config = config;
+    this.name = this.constructor.name;
+  }
+  validate(data) { return data && data.length > 0; }
+  getTerminator() { return '\r\n'; }
+  extractWeight(str) {
+    if (!str) return 0;
+    const value = parseFloat(str.replace(/[^\d.-]/g, ''));
+    return isNaN(value) ? 0 : value;
+  }
+  createResult(overrides = {}) {
+    return {
+      deck: 1, weight: 0, unit: 'kg', stable: true,
+      motion: false, overload: false, underload: false,
+      tare: 0, net: null, gross: null, raw: '',
+      timestamp: new Date(), ...overrides
+    };
+  }
 }
 
-// ─── Pretty-print deck table ─────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+//  Inlined ZmParser
+// ════════════════════════════════════════════════════════════════════════════
+class ZmParser extends ParserInterface {
+  constructor(config = {}) {
+    super(config);
+    this.deckNumber = config.deck || 1;
+  }
+
+  parse(data) {
+    if (!this.validate(data)) return null;
+    const str = data.toString().trim();
+
+    // Zedem 510 multi-deck: "00,    00,  1100,  1000, 2100"
+    const parts = str.split(',').map(p => p.trim());
+    const isMultiDeck = parts.length >= 4 && parts.every(p => /^\d+$/.test(p));
+    if (isMultiDeck) return this._parseMultiDeck(parts);
+
+    const result = this.createResult({ raw: str, deck: this.deckNumber });
+
+    if (str.includes('OL')) { result.overload = true; result.weight = 0; return result; }
+    if (str.includes('UL')) { result.underload = true; result.weight = 0; return result; }
+
+    if (parts.length < 2) return null;
+    const header = parts[0].toUpperCase();
+    const value  = this.extractWeight(parts[1]);
+    const unit   = parts[2] || 'kg';
+
+    switch (header) {
+      case 'GS': result.weight = value; result.gross = value; result.stable = true; break;
+      case 'GU': result.weight = value; result.gross = value; result.stable = false; result.motion = true; break;
+      case 'NS':
+      case 'NT': result.weight = value; result.net = value; result.stable = true; break;
+      case 'NU': result.weight = value; result.net = value; result.stable = false; result.motion = true; break;
+      case 'TR': result.tare = value; result.weight = 0; break;
+      default:   result.weight = value;
+    }
+    result.unit = unit.toLowerCase();
+    return result;
+  }
+
+  _parseMultiDeck(parts) {
+    const decks = [];
+    for (let i = 0; i < 4 && i < parts.length; i++) {
+      const w = parseInt(parts[i], 10);
+      decks.push(this.createResult({
+        deck: i + 1, weight: isNaN(w) ? 0 : w, gross: isNaN(w) ? 0 : w,
+        stable: true, unit: 'kg', raw: parts[i]
+      }));
+    }
+    return decks;
+  }
+
+  validate(data) {
+    return super.validate(data) && data.toString().trim().length >= 2;
+  }
+}
+
+// ─── RDU formatter ───────────────────────────────────────────────────────────
+function formatRdu(weightKg) {
+  const reversed = Math.abs(Math.round(weightKg)).toString().split('').reverse().join('');
+  return `=${reversed.padEnd(8, '0')}=`;
+}
+
+// ─── Pretty-print deck table ──────────────────────────────────────────────────
 function printDeckTable(results, rawLine) {
   const ts = new Date().toISOString().slice(11, 23);
   console.log(`\n[${ts}] Raw: "${rawLine}"`);
@@ -53,16 +123,14 @@ function printDeckTable(results, rawLine) {
   results.forEach(r => {
     const deck   = (r.deck > 0 ? `Deck ${r.deck}` : 'GVW').padEnd(6);
     const wt     = String(r.weight).padStart(10);
-    const rduStr = formatRdu(r.weight);
     const stable = r.stable !== false ? 'yes' : 'no (motion)';
-    console.log(`  │ ${deck} │ ${wt} │ ${rduStr} │ ${stable.padEnd(8)} │`);
+    console.log(`  │ ${deck} │ ${wt} │ ${formatRdu(r.weight)} │ ${stable.padEnd(8)} │`);
   });
   console.log('  └────────┴────────────┴────────────┴──────────┘');
 }
 
-// ─── Parser-only validation ──────────────────────────────────────────────────
+// ─── Parser-only validation ───────────────────────────────────────────────────
 function runParserOnly() {
-  const ZmParser = require(path.join(__dirname, '..', 'src', 'parsers', 'ZmParser'));
   const parser = new ZmParser();
 
   const TEST_CASES = [
@@ -77,18 +145,15 @@ function runParserOnly() {
   console.log('══════════════════════════════════════════════════════════');
 
   let passed = 0, failed = 0;
-
   for (const tc of TEST_CASES) {
     console.log(`\n▶ ${tc.label}: "${tc.input}"`);
     const result  = parser.parse(tc.input);
     const results = Array.isArray(result) ? result : (result ? [result] : []);
-
     if (results.length === 0) {
       console.log('  ❌ parse returned null/empty');
       failed++;
       continue;
     }
-
     printDeckTable(results, tc.input);
     passed++;
   }
@@ -98,7 +163,7 @@ function runParserOnly() {
   console.log('══════════════════════════════════════════════════════════\n');
 }
 
-// ─── Live serial mode ────────────────────────────────────────────────────────
+// ─── Live serial mode ─────────────────────────────────────────────────────────
 async function runLiveSerial() {
   let SerialPort;
   try {
@@ -108,7 +173,6 @@ async function runLiveSerial() {
     process.exit(1);
   }
 
-  const ZmParser = require(path.join(__dirname, '..', 'src', 'parsers', 'ZmParser'));
   const parser = new ZmParser();
 
   console.log('\n══════════════════════════════════════════════════════════');
@@ -120,12 +184,8 @@ async function runLiveSerial() {
   console.log('  Press Ctrl+C to stop\n');
 
   const port = new SerialPort({
-    path:     SERIAL_PORT,
-    baudRate: BAUD_RATE,
-    dataBits: 8,
-    parity:   'none',
-    stopBits: 1,
-    autoOpen: false
+    path: SERIAL_PORT, baudRate: BAUD_RATE,
+    dataBits: 8, parity: 'none', stopBits: 1, autoOpen: false
   });
 
   port.open(err => {
@@ -136,7 +196,6 @@ async function runLiveSerial() {
     }
     console.log(`✅ ${SERIAL_PORT} opened — waiting for indicator data...\n`);
 
-    // Periodic weight query ('W' command for ZM protocol)
     const queryTimer = setInterval(() => {
       port.write('W', writeErr => {
         if (writeErr) console.warn(`  ⚠ Query write error: ${writeErr.message}`);
@@ -148,44 +207,35 @@ async function runLiveSerial() {
 
     port.on('data', data => {
       buffer += data.toString();
-
-      // Split on CR/LF — Zedem 510 terminates each line with \r\n
       const lines = buffer.split(/\r\n|\r|\n/);
-      buffer = lines.pop(); // keep partial last line
+      buffer = lines.pop();
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed || trimmed === lastRaw) continue; // skip duplicates / empty
+        if (!trimmed || trimmed === lastRaw) continue;
         lastRaw = trimmed;
 
         const result  = parser.parse(trimmed);
         const results = Array.isArray(result) ? result : (result ? [result] : []);
-
         if (results.length === 0) {
           console.log(`  [raw] "${trimmed}" — no parse match`);
           continue;
         }
-
         printDeckTable(results, trimmed);
       }
     });
 
-    port.on('error', err => {
-      console.error(`❌ Serial error: ${err.message}`);
-    });
+    port.on('error', err => console.error(`❌ Serial error: ${err.message}`));
 
     process.on('SIGINT', () => {
       clearInterval(queryTimer);
       console.log('\n  Closing serial port...');
-      port.close(() => {
-        console.log('  Done.\n');
-        process.exit(0);
-      });
+      port.close(() => { console.log('  Done.\n'); process.exit(0); });
     });
   });
 }
 
-// ─── Entry point ─────────────────────────────────────────────────────────────
+// ─── Entry point ──────────────────────────────────────────────────────────────
 if (PARSER_ONLY) {
   runParserOnly();
 } else {
