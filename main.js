@@ -458,9 +458,8 @@ function broadcastWeights(weights, error = null, weightData = null) {
     ];
 
     if (rduCommunicator && typeof rduCommunicator.updateWeights === 'function') {
-      const hasChanges = rduCommunicator.updateWeights(weightsArray);
-
-      if (hasChanges && typeof rduCommunicator.sendToAllRdus === 'function') {
+      rduCommunicator.updateWeights(weightsArray);
+      if (typeof rduCommunicator.sendToAllRdus === 'function') {
         rduCommunicator.sendToAllRdus(true);
       }
     }

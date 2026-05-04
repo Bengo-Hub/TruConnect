@@ -23,8 +23,8 @@ class RDUCommunicator {
     this.config = config;
     this.connections = [];
     this.currentWeights = [0, 0, 0, 0, 0]; // deck1, deck2, deck3, deck4, gvw
-    this.WEIGHT_THRESHOLD = 10;
     this.enabled = config.enabled || false;
+    this.keepAliveTimer = null;
 
     // Message format - default format (no $ prefix, matches Zedem 510 RDU expectations)
     this.messageFormat = config.format || '={WEIGHT}=';
@@ -78,6 +78,27 @@ class RDUCommunicator {
       this.initializeSerialConnections();
     } else if (this.config.connectionType === 'usr') {
       this.initializeUsrConnection();
+    }
+
+    // Keep-alive: send current weights every 500 ms so RDU panels never show "no comm"
+    this.startKeepAlive(500);
+  }
+
+  /**
+   * Start a periodic keep-alive that continuously sends current weights to all RDU panels.
+   * Prevents RDU "no comm" when weights are stable or no vehicle is on deck.
+   */
+  startKeepAlive(intervalMs = 500) {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      this.sendToAllRdus(true);
+    }, intervalMs);
+  }
+
+  stopKeepAlive() {
+    if (this.keepAliveTimer) {
+      clearInterval(this.keepAliveTimer);
+      this.keepAliveTimer = null;
     }
   }
 
@@ -209,34 +230,20 @@ class RDUCommunicator {
   }
 
   /**
-   * Update current weights
+   * Update current weights.
+   * Always stores the latest values so the keep-alive sends them continuously.
    * @param {number[]} newWeights - Array of weights [deck1, deck2, deck3, deck4] or with GVW
-   * @returns {boolean} - True if weights changed significantly
    */
   updateWeights(newWeights) {
-    // Ensure we have 5 values (deck1-4 + GVW)
     const weights = [...newWeights];
     while (weights.length < 4) weights.push(0);
 
-    // Calculate GVW if not provided
+    // Calculate GVW from deck sum if not provided
     if (weights.length === 4) {
       weights.push(weights.reduce((sum, w) => sum + w, 0));
     }
 
-    if (this.hasSignificantChange(weights)) {
-      this.currentWeights = weights;
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Check if weights changed significantly
-   */
-  hasSignificantChange(newWeights) {
-    return newWeights.some((w, i) =>
-      Math.abs(w - (this.currentWeights[i] || 0)) > this.WEIGHT_THRESHOLD
-    );
+    this.currentWeights = weights;
   }
 
   /**
@@ -326,9 +333,10 @@ class RDUCommunicator {
   }
 
   /**
-   * Shutdown all connections
+   * Shutdown all connections and stop keep-alive
    */
   shutdown() {
+    this.stopKeepAlive();
     this.connections.forEach(conn => {
       if (conn.serialPort?.isOpen) {
         try {
