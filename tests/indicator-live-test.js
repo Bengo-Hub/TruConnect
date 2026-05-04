@@ -599,10 +599,7 @@ function sendToRdus() {
   const ts = new Date().toISOString().slice(11, 23);
   weights.forEach((w, i) => {
     const conn = rduConns[i];
-    if (!conn || !conn.connected || !conn.socket?.writable) {
-      if (conn) console.log(`[${ts}] ⚠ RDU ${deckLabels[i]} (port ${conn.port}): not connected — skipping`);
-      return;
-    }
+    if (!conn || !conn.connected || !conn.socket?.writable) return;
     const msg = formatRdu(w);
     console.log(`[${ts}] 📤 RDU→ ${deckLabels[i]} (USR port ${conn.port}): ${w} kg  →  "${msg}"`);
     conn.socket.write(msg, err => {
@@ -621,19 +618,13 @@ let buffer = '';
 function handleData(data, parser) {
   const ts = new Date().toISOString().slice(11, 23);
 
-  // Show every raw chunk received (hex + printable) — critical for baud-rate debugging
-  const hex = Buffer.from(data).toString('hex').match(/.{2}/g)?.join(' ') ?? '';
-  const printable = data.toString().replace(/[\x00-\x1F\x7F]/g, c =>
-    c === '\r' ? '↵' : c === '\n' ? '↩' : `[${c.charCodeAt(0).toString(16).padStart(2,'0')}]`
-  );
-  console.log(`[${ts}] 📡 RX ${data.length}b: "${printable}"  hex: ${hex}`);
-
   buffer += data.toString();
   const lines = buffer.split(/\r\n|\r|\n/);
   buffer = lines.pop();
 
   for (const line of lines) {
-    const trimmed = line.trim();
+    // Strip non-printable control chars (STX 0x02, etc.) that some indicators prepend
+    const trimmed = line.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim();
     if (!trimmed) continue;
 
     console.log(`[${ts}] 📥 Weight string: "${trimmed}"`);
@@ -685,23 +676,14 @@ async function startSerial(parser) {
 
       const queryCmd = getQueryCommand(opts.protocol);
       let queryTimer = null;
-      let querySentCount = 0;
-      
+
       if (queryCmd) {
         const queryDesc = `0x05 (ENQ)`;
         console.log(`  📤 Query: sending ${queryDesc} every 1000ms (${opts.protocol} protocol)`);
         
         queryTimer = setInterval(() => {
           port.write(queryCmd, writeErr => {
-            if (!writeErr) {
-              querySentCount++;
-              if (querySentCount === 1 || querySentCount % 20 === 0) {
-                const ts = new Date().toISOString().slice(11, 23);
-                        console.log(`[${ts}] 📤 Query sent: ENQ (0x05)  count=${querySentCount}`);
-              }
-            } else {
-              console.warn(`  ⚠ Query error: ${writeErr.message}`);
-            }
+            if (writeErr) console.warn(`  ⚠ Query error: ${writeErr.message}`);
           });
         }, 1000);
       } else {
@@ -734,17 +716,8 @@ async function startTcp(parser) {
         const queryDesc = `0x05 (ENQ)`;
         console.log(`  📤 Query mode: ${opts.protocol} protocol — sending ${queryDesc} every 1000ms via TCP`);
         
-        let querySentCount = 0;
         const queryTimer = setInterval(() => {
-          socket.write(queryCmd, writeErr => {
-            if (!writeErr) {
-              querySentCount++;
-              if (querySentCount === 1 || querySentCount % 20 === 0) {
-                const ts = new Date().toISOString().slice(11, 23);
-                console.log(`[${ts}] 📤 TCP Query sent (${opts.protocol}): count=${querySentCount}`);
-              }
-            }
-          });
+          socket.write(queryCmd);
         }, 1000);
         socket.once('close', () => clearInterval(queryTimer));
       } else {

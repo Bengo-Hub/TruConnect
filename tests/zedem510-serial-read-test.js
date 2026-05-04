@@ -200,8 +200,6 @@ async function runLiveSerial() {
     dataBits: 8, parity: 'none', stopBits: 1, autoOpen: false
   });
 
-  let querySentCount = 0;
-
   port.open(err => {
     if (err) {
       console.error(`❌ Cannot open ${SERIAL_PORT}: ${err.message}`);
@@ -211,16 +209,8 @@ async function runLiveSerial() {
     console.log(`✅ ${SERIAL_PORT} opened @ ${BAUD_RATE} bps — waiting for indicator data...\n`);
 
     const queryTimer = setInterval(() => {
-      const ts = new Date().toISOString().slice(11, 23);
       port.write(QUERY_CMD, writeErr => {
-        if (!writeErr) {
-          querySentCount++;
-          if (querySentCount === 1 || querySentCount % 30 === 0) {
-            console.log(`[${ts}] 📤 Query sent: ENQ (0x05) — count=${querySentCount}`);
-          }
-        } else {
-          console.warn(`[${ts}] ⚠ Query write error: ${writeErr.message}`);
-        }
+        if (writeErr) console.warn(`⚠ Query write error: ${writeErr.message}`);
       });
     }, QUERY_MS);
 
@@ -229,19 +219,14 @@ async function runLiveSerial() {
 
     port.on('data', data => {
       const ts = new Date().toISOString().slice(11, 23);
-      // Log every raw chunk (hex + printable) so we can see exactly what the indicator sends
-      const hex = Buffer.from(data).toString('hex').match(/.{2}/g)?.join(' ') ?? '';
-      const printable = data.toString().replace(/[\x00-\x1F\x7F]/g, c =>
-        c === '\r' ? '↵' : c === '\n' ? '↩' : `[${c.charCodeAt(0).toString(16).padStart(2,'0')}]`
-      );
-      console.log(`[${ts}] 📡 RX ${data.length}b: "${printable}"  hex: ${hex}`);
 
       buffer += data.toString();
       const lines = buffer.split(/\r\n|\r|\n/);
       buffer = lines.pop();
 
       for (const line of lines) {
-        const trimmed = line.trim();
+        // Strip non-printable control chars (STX 0x02, etc.) that some indicators prepend
+        const trimmed = line.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim();
         if (!trimmed) continue;
         if (trimmed === lastRaw) {
           console.log(`[${ts}] ↩ Duplicate line skipped: "${trimmed}"`);

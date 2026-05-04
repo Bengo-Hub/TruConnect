@@ -169,7 +169,7 @@ class ConfigManager {
     let obj = this.config;
 
     for (const key of keys) {
-      if (obj[key] === undefined) {
+      if (obj[key] == null) {
         obj[key] = {};
       }
       obj = obj[key];

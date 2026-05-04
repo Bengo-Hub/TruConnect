@@ -29,7 +29,8 @@ class ZmParser extends ParserInterface {
   parse(data) {
     if (!this.validate(data)) return null;
 
-    const str = data.toString().trim();
+    // Strip non-printable control chars (STX 0x02, etc.) that some indicators prepend
+    const str = data.toString().replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim();
 
     // Zedem 510 multi-deck format: "00,    00,  1100,  1000, 2100"
     // 4–5 comma-separated numeric values, no alpha header codes.
@@ -126,7 +127,7 @@ class ZmParser extends ParserInterface {
   }
 
   getTerminator() {
-    return '\r\n';
+    return '\n';
   }
 
   getInfo() {

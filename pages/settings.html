@@ -1811,9 +1811,7 @@
         name:           document.getElementById('rdu-name').value,
         connectionType: rduActiveTab,
         format:         rduFormat.value,
-        usr: rduActiveTab === 'usr'
-          ? { ip: document.getElementById('usr-ip').value }
-          : null,
+        usr: { ip: document.getElementById('usr-ip')?.value || '' },
         panels
       };
     }
