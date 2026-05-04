@@ -545,12 +545,15 @@ class InputManager {
               currentWeight: correctedWeight
             });
           } else {
-            // Multideck mode: update state manager with deck weights
-            if (weightData.deck) {
+            // Multideck mode: update state manager with deck weights.
+            // deck > 0 are individual deck weights (1–4).
+            // deck === 0 means GVW/Total from the indicator — we skip setDeckWeight
+            // for it because StateManager recalculates GVW as the sum of deck 1–4.
+            if (weightData.deck > 0) {
               StateManager.setDeckWeight(weightData.deck, weightData.weight);
             }
 
-            // Emit parsed weight
+            // Emit parsed weight (deck 0 GVW results are emitted but not stored)
             EventBus.emit('input:weight', {
               ...weightData,
               source: this.activeSource,

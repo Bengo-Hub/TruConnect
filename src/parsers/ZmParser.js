@@ -30,6 +30,15 @@ class ZmParser extends ParserInterface {
     if (!this.validate(data)) return null;
 
     const str = data.toString().trim();
+
+    // Zedem 510 multi-deck format: "00,    00,  1100,  1000, 2100"
+    // 4–5 comma-separated numeric values, no alpha header codes.
+    const parts = str.split(',').map(p => p.trim());
+    const isMultiDeck = parts.length >= 4 && parts.every(p => /^\d+$/.test(p));
+    if (isMultiDeck) {
+      return this._parseMultiDeck(parts);
+    }
+
     const result = this.createResult({ raw: str, deck: this.deckNumber });
 
     // Check for overload/underload
@@ -45,9 +54,7 @@ class ZmParser extends ParserInterface {
       return result;
     }
 
-    // Parse CSV format: HEADER, VALUE, UNIT
-    const parts = str.split(',').map(p => p.trim());
-
+    // Parse standard ZM CSV format: HEADER, VALUE, UNIT
     if (parts.length < 2) return null;
 
     const header = parts[0].toUpperCase();
@@ -84,12 +91,31 @@ class ZmParser extends ParserInterface {
         result.weight = 0;
         break;
       default:
-        // Unknown header, try to extract weight anyway
         result.weight = value;
     }
 
     result.unit = unit.toLowerCase();
     return result;
+  }
+
+  /**
+   * Parse Zedem 510 multi-deck CSV: "00,    00,  1100,  1000, 2100"
+   * Returns array of 4 deck results (GVW at index 4 is omitted; serialout recalculates it).
+   */
+  _parseMultiDeck(parts) {
+    const decks = [];
+    for (let i = 0; i < 4 && i < parts.length; i++) {
+      const w = parseInt(parts[i], 10);
+      decks.push(this.createResult({
+        deck: i + 1,
+        weight: isNaN(w) ? 0 : w,
+        gross: isNaN(w) ? 0 : w,
+        stable: true,
+        unit: 'kg',
+        raw: parts[i]
+      }));
+    }
+    return decks;
   }
 
   validate(data) {

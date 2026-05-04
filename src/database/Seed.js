@@ -16,7 +16,9 @@ const defaults = require('../config/defaults');
 
 // Current seed version - increment when adding new seeds
 // v2.1.0: New input configuration structure with separate scale/indicator configs
-const SEED_VERSION = '2.1.3';
+// v2.2.0: Top-level rdu config for RDUCommunicator (multi-deck USR panel routing),
+//         all 4 decks enabled by default, indicator multiDeck flag added
+const SEED_VERSION = '2.2.0';
 
 const DEFAULT_ADMIN = {
   email: 'admin@codevertexitsolutions.com',

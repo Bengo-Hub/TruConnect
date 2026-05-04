@@ -83,6 +83,19 @@ class CustomParser extends ParserInterface {
     this.fixedConfig = config.fixed || {};
     this.jsonConfig = config.json || { paths: { weight: 'weight' } };
 
+    // Multi-deck config — for indicators that send all deck weights in one message.
+    // Works with delimiter mode: each comma-separated value is a deck weight.
+    // Example: "1250, 1340, 1180, 1420" → deck1=1250, deck2=1340, deck3=1180, deck4=1420
+    //
+    // multiDeck: {
+    //   enabled: true,
+    //   deckCount: 4,           // Number of decks to parse (1–4)
+    //   separator: ',',         // Delimiter between deck values (defaults to delimiterConfig.separator)
+    //   startIndex: 0,          // Field index of first deck value
+    //   unit: 'kg'
+    // }
+    this.multiDeckConfig = config.multiDeck || { enabled: false };
+
     // Common options
     this.defaults = config.defaults || { deck: 1, unit: 'kg' };
     this.statusMap = config.statusMap || {
@@ -106,6 +119,11 @@ class CustomParser extends ParserInterface {
 
     const str = data.toString().trim();
 
+    // Multi-deck delimiter parsing — returns array of deck results
+    if (this.multiDeckConfig.enabled && this.mode === 'delimiter') {
+      return this.parseMultiDeck(str);
+    }
+
     switch (this.mode) {
       case 'regex':
         return this.parseRegex(str);
@@ -118,6 +136,37 @@ class CustomParser extends ParserInterface {
       default:
         return null;
     }
+  }
+
+  /**
+   * Parse a multi-deck delimiter message and return an array of per-deck results.
+   * Each delimited field is a deck weight (deck1, deck2, ...).
+   * The last field may be GVW — it is included as deck:0 if deckCount < total fields.
+   */
+  parseMultiDeck(str) {
+    const sep       = this.multiDeckConfig.separator || this.delimiterConfig.separator || ',';
+    const deckCount = this.multiDeckConfig.deckCount || 4;
+    const start     = this.multiDeckConfig.startIndex || 0;
+    const unit      = this.multiDeckConfig.unit || this.defaults.unit || 'kg';
+
+    const parts = str.split(sep).map(p => p.trim());
+    const results = [];
+
+    for (let i = 0; i < deckCount; i++) {
+      const fieldIdx = start + i;
+      if (fieldIdx >= parts.length) break;
+      const w = this.extractWeight(parts[fieldIdx]);
+      results.push(this.createResult({
+        deck: i + 1,
+        weight: w,
+        gross: w,
+        stable: true,
+        unit: unit,
+        raw: str
+      }));
+    }
+
+    return results.length > 0 ? results : null;
   }
 
   /**
