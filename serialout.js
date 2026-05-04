@@ -26,16 +26,12 @@ class RDUCommunicator {
     this.WEIGHT_THRESHOLD = 10;
     this.enabled = config.enabled || false;
 
-    // Message format - default KELI format
-    this.messageFormat = config.format || '$={WEIGHT}=';
+    // Message format - default format (no $ prefix, matches Zedem 510 RDU expectations)
+    this.messageFormat = config.format || '={WEIGHT}=';
 
     // Determine format type based on model
     const model = (config.model || 'KELI').toUpperCase();
     this.useReversedFormat = REVERSED_FORMAT_MODELS.includes(model);
-
-    // USR device connection (for network mode)
-    this.usrClient = null;
-    this.usrConnected = false;
   }
 
   /**
@@ -110,8 +106,8 @@ class RDUCommunicator {
   }
 
   /**
-   * Initialize USR-TCP232 network connection
-   * All panels share the same USR device
+   * Initialize USR-TCP232 network connections — one TCP socket per panel/deck.
+   * Each panel connects to its own port on the USR device (e.g. 20, 21, 22, 23, 24).
    */
   initializeUsrConnection() {
     if (!this.config.usr || !this.config.usr.ip) {
@@ -119,40 +115,56 @@ class RDUCommunicator {
       return;
     }
 
-    const connectUsr = () => {
-      this.usrClient = new net.Socket();
-
-      this.usrClient.connect(this.config.usr.port || 4196, this.config.usr.ip, () => {
-        console.log(`USR device connected: ${this.config.usr.ip}:${this.config.usr.port}`);
-        this.usrConnected = true;
-      });
-
-      this.usrClient.on('error', err => {
-        console.error('USR connection error:', err.message);
-        this.usrConnected = false;
-        setTimeout(connectUsr, 5000);
-      });
-
-      this.usrClient.on('close', () => {
-        console.warn('USR connection closed');
-        this.usrConnected = false;
-        setTimeout(connectUsr, 5000);
-      });
-    };
-
-    connectUsr();
-
-    // Create virtual connections for each panel (channel-based)
-    this.config.panels.forEach((panel, index) => {
-      this.connections.push({
+    this.config.panels.forEach((panel) => {
+      const conn = {
         id: `panel-${panel.deckIndex}`,
         deckIndex: panel.deckIndex,
         type: 'USR',
-        channel: panel.channel || index,
-        active: true, // Depends on USR connection
+        active: false,
+        socket: null,
         baudRate: panel.baudRate || 1200
-      });
+      };
+
+      this.setupUsrConnection(conn, panel);
+      this.connections.push(conn);
     });
+  }
+
+  /**
+   * Open and maintain a TCP connection for one USR panel.
+   * Reconnects automatically on error or close.
+   */
+  setupUsrConnection(conn, panel) {
+    const ip = this.config.usr.ip;
+    const port = panel.usrPort;
+
+    if (!port) {
+      console.warn(`${conn.id}: no usrPort configured, skipping`);
+      return;
+    }
+
+    const connect = () => {
+      conn.socket = new net.Socket();
+
+      conn.socket.connect(port, ip, () => {
+        console.log(`${conn.id} connected to USR ${ip}:${port}`);
+        conn.active = true;
+      });
+
+      conn.socket.on('error', err => {
+        console.error(`${conn.id} USR socket error (${ip}:${port}): ${err.message}`);
+        conn.active = false;
+        setTimeout(connect, 5000);
+      });
+
+      conn.socket.on('close', () => {
+        console.warn(`${conn.id} USR socket closed (${ip}:${port}), reconnecting...`);
+        conn.active = false;
+        setTimeout(connect, 5000);
+      });
+    };
+
+    connect();
   }
 
   /**
@@ -268,15 +280,12 @@ class RDUCommunicator {
   }
 
   /**
-   * Send message via USR device
-   * USR-TCP232 typically routes data to connected serial ports based on config
+   * Send message via the panel's dedicated USR TCP socket.
    */
   sendUsr(conn, message, log = false) {
-    if (!this.usrConnected || !this.usrClient?.writable) return;
+    if (!conn.active || !conn.socket?.writable) return;
 
-    // For USR devices, we might need to prefix with channel info
-    // This depends on the specific USR model configuration
-    this.usrClient.write(message, err => {
+    conn.socket.write(message, err => {
       if (err) {
         console.error(`${conn.id} USR send error:`, err.message);
       } else if (log) {
@@ -311,7 +320,7 @@ class RDUCommunicator {
         id: c.id,
         deckIndex: c.deckIndex,
         type: c.type,
-        active: c.type === 'USR' ? this.usrConnected : c.active
+        active: c.active
       }))
     };
   }
@@ -328,20 +337,18 @@ class RDUCommunicator {
           console.error(`Error closing ${conn.id}:`, e.message);
         }
       }
+      if (conn.socket) {
+        try {
+          conn.socket.destroy();
+        } catch (e) {
+          console.error(`Error closing USR socket for ${conn.id}:`, e.message);
+        }
+        conn.socket = null;
+        conn.active = false;
+      }
     });
 
-    if (this.usrClient) {
-      try {
-        this.usrClient.end();
-        this.usrClient.destroy();
-      } catch (e) {
-        console.error('Error closing USR connection:', e.message);
-      }
-    }
-
     this.connections = [];
-    this.usrClient = null;
-    this.usrConnected = false;
   }
 }
 

@@ -42,17 +42,53 @@ module.exports = {
       basePath: '/weights' // Dev url http://localhost:3031/api/v1/weights
     },
 
-    // RDU output (serial display)
+    // RDU output (serial display or network, single-channel — used by OutputManager for mobile GVW)
     rdu: {
       enabled: false,
       type: 'serial',                 // 'serial' | 'network'
-      // Serial config
       port: '',                       // COM port (e.g., 'COM3')
       baudRate: 1200,
-      // Network config (USR-TCP232)
       host: '',
       networkPort: 4196
     }
+  },
+
+  // =====================================================
+  // RDU COMMUNICATOR (serialout.js / RDUCommunicator)
+  // Multi-deck mode: one panel per deck, each routed to
+  // its own COM port or USR TCP port.
+  //
+  // connectionType: 'serial' | 'usr'
+  //
+  // Serial panel shape:   { deckIndex, port, baudRate }
+  // USR panel shape:      { deckIndex, usrPort, baudRate }
+  //   deckIndex 0–3 → deck1–deck4 weights
+  //   deckIndex 4   → GVW
+  //
+  // model controls digit format:
+  //   'KELI' | 'YAOHUA' | 'XK3190' → reversed digits, padded to 8, no ×10
+  //   'CARDINAL' | 'AVERY'         → leading zeros, no ×10
+  //
+  // format: '={WEIGHT}=' for Zedem/KELI RDUs (no $ prefix)
+  //
+  // Zedem 510 + USR IOT default (192.168.42.200, ports 20–24):
+  //   set enabled:true and captureMode:'multideck' to activate
+  // =====================================================
+  rdu: {
+    enabled: false,
+    connectionType: 'usr',            // 'serial' | 'usr'
+    model: 'KELI',                    // reversed digits, no ×10
+    format: '={WEIGHT}=',             // no $ prefix for Zedem/KELI RDUs
+    usr: {
+      ip: '192.168.42.200'            // USR IOT device IP
+    },
+    panels: [
+      { deckIndex: 0, usrPort: 20, baudRate: 1200 },  // deck1 → RDU1
+      { deckIndex: 1, usrPort: 21, baudRate: 1200 },  // deck2 → RDU2
+      { deckIndex: 2, usrPort: 22, baudRate: 1200 },  // deck3 → RDU3
+      { deckIndex: 3, usrPort: 23, baudRate: 1200 },  // deck4 → RDU4
+      { deckIndex: 4, usrPort: 24, baudRate: 1200 }   // GVW   → RDU5
+    ]
   },
 
   // Input configuration
@@ -144,45 +180,51 @@ module.exports = {
 
     // =====================================================
     // MULTIDECK INDICATORS (platform/static weighbridge)
-    // Each indicator model has different protocol/commands
+    // All indicators below are multi-deck by design.
+    // Only mobile sources (paw, haenni, mcgs) support
+    // axle-by-axle capture. Indicators always produce
+    // deck-indexed weight results routed to per-deck RDUs.
     // =====================================================
 
-    // ZM Protocol Indicators (e.g., Avery Weigh-Tronix, Ohaus)
-    // Query-response via serial, supports multi-deck
+    // ZM Protocol Indicators (e.g., Zedem ZM-510, Avery Weigh-Tronix, Ohaus)
+    // Query-response via serial/TCP.
+    // Multi-deck output: "00,    00,  1100,  1000, 2100" (deck1–4, GVW)
     indicator_zm: {
       enabled: false,
       type: 'serial',
       protocol: 'ZM',
+      multiDeck: true,                  // Always multi-deck — do not change
       metadata: {
-        make: 'Zedem',                // Indicator manufacturer
-        model: 'ZM-400',              // Indicator model
-        capacity: 80000               // Max weight capacity in kg
+        make: 'Zedem',
+        model: 'ZM-510',
+        capacity: 80000
       },
       serial: {
         port: 'COM1',
-        baudRate: 9600,
+        baudRate: 1200,                 // Zedem 510 baud rate
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
-        queryCommand: 'W'             // ASCII 'W' for weight query
+        queryCommand: 'W'               // ASCII 'W' triggers weight output
       },
       tcp: {
-        host: '192.168.1.100',
+        host: '192.168.1.100',          // Indicator IP or USR input port host
         port: 4001
       },
-      connectionType: 'serial'
+      connectionType: 'serial'          // 'serial' | 'tcp'
     },
 
     // Cardinal Scale Indicators (Model 190, 210, etc.)
-    // Continuous output mode, no query required
+    // Continuous output, fixed 90-char message with all deck weights.
     indicator_cardinal: {
       enabled: false,
       type: 'serial',
       protocol: 'CARDINAL',
+      multiDeck: true,
       metadata: {
-        make: 'Cardinal',             // Indicator manufacturer
-        model: '190',                 // Indicator model
-        capacity: 80000               // Max weight capacity in kg
+        make: 'Cardinal',
+        model: '190',
+        capacity: 80000
       },
       serial: {
         port: 'COM1',
@@ -190,7 +232,7 @@ module.exports = {
         dataBits: 7,
         parity: 'odd',
         stopBits: 1,
-        queryCommand: ''              // Cardinal uses continuous output
+        queryCommand: ''                // Continuous output — no query needed
       },
       tcp: {
         host: '192.168.1.100',
@@ -199,15 +241,17 @@ module.exports = {
       connectionType: 'serial'
     },
 
-    // Cardinal Scale Model 225/738 (different format)
+    // Cardinal Scale Model 225/738
+    // Per-deck streaming: D1: 1250 kg S  D2: 1340 kg S  GVW: 5190 kg S
     indicator_cardinal2: {
       enabled: false,
       type: 'serial',
       protocol: 'CARDINAL2',
+      multiDeck: true,
       metadata: {
-        make: 'Cardinal',             // Indicator manufacturer
-        model: '225',                 // Indicator model
-        capacity: 80000               // Max weight capacity in kg
+        make: 'Cardinal',
+        model: '225',
+        capacity: 80000
       },
       serial: {
         port: 'COM1',
@@ -215,7 +259,7 @@ module.exports = {
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
-        queryCommand: '\x05'          // ENQ character for query
+        queryCommand: '\x05'            // ENQ triggers deck output
       },
       tcp: {
         host: '192.168.1.100',
@@ -225,15 +269,16 @@ module.exports = {
     },
 
     // Rice Lake 1310 Indicator
-    // ENQ/STX protocol
+    // Per-deck: "Scale No: 1  Weight: 1250 kg Stable"
     indicator_1310: {
       enabled: false,
       type: 'serial',
       protocol: '1310',
+      multiDeck: true,
       metadata: {
-        make: 'Rice Lake',            // Indicator manufacturer
-        model: '1310',                // Indicator model
-        capacity: 80000               // Max weight capacity in kg
+        make: 'Rice Lake',
+        model: '1310',
+        capacity: 80000
       },
       serial: {
         port: 'COM1',
@@ -241,7 +286,7 @@ module.exports = {
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
-        queryCommand: '\x05'          // ENQ (0x05) for query
+        queryCommand: '\x05'            // ENQ (0x05) triggers output
       },
       tcp: {
         host: '192.168.1.100',
@@ -250,16 +295,18 @@ module.exports = {
       connectionType: 'serial'
     },
 
-    // Custom/Generic Indicator Configuration
-    // For indicators not in the predefined list
+    // Custom/Generic Indicator
+    // For indicators not in the predefined list.
+    // Configure parserConfig.multiDeck for multi-deck CSV indicators.
     custom: {
       enabled: false,
-      type: 'serial',                 // 'serial' | 'tcp' | 'udp' | 'api'
+      type: 'serial',                   // 'serial' | 'tcp' | 'udp' | 'api'
       protocol: 'CUSTOM',
+      multiDeck: false,                 // Set true for multi-deck custom indicators
       metadata: {
-        make: 'Custom',               // Indicator/scale manufacturer
-        model: 'Custom',              // Indicator/scale model
-        capacity: 80000               // Max weight capacity in kg
+        make: 'Custom',
+        model: 'Custom',
+        capacity: 80000
       },
       serial: {
         port: 'COM1',
@@ -310,12 +357,13 @@ module.exports = {
       }
     },
 
-    // Deck configuration (for multi-deck setups)
+    // Deck configuration — all 4 enabled by default for multi-deck indicators.
+    // Disable unused decks in the UI for single- or 2-deck weighbridges.
     decks: [
       { id: 1, name: 'Deck 1', enabled: true },
-      { id: 2, name: 'Deck 2', enabled: false },
-      { id: 3, name: 'Deck 3', enabled: false },
-      { id: 4, name: 'Deck 4', enabled: false }
+      { id: 2, name: 'Deck 2', enabled: true },
+      { id: 3, name: 'Deck 3', enabled: true },
+      { id: 4, name: 'Deck 4', enabled: true }
     ]
   },
 
