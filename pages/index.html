@@ -356,6 +356,63 @@
       border-color: var(--primary);
     }
 
+    /* Update Banner */
+    #update-banner {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #1a2a1a, #1e2e1e);
+      border-bottom: 1px solid #2e6b2e;
+      padding: 10px 20px;
+      font-size: 0.875rem;
+      color: #c8f0c8;
+      position: relative;
+      z-index: 99;
+    }
+    #update-banner.visible { display: flex; }
+    #update-banner .banner-icon { color: #4CAF50; font-size: 1rem; flex-shrink: 0; }
+    #update-banner .banner-text { flex: 1; }
+    #update-banner .banner-text strong { color: #81d881; }
+    #update-banner .banner-progress {
+      flex: 0 0 160px;
+      height: 6px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #update-banner .banner-progress-bar {
+      height: 100%;
+      background: #4CAF50;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    #update-banner .banner-btn {
+      padding: 5px 14px;
+      border-radius: 4px;
+      border: 1px solid #4CAF50;
+      background: transparent;
+      color: #81d881;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    #update-banner .banner-btn:hover { background: rgba(76,175,80,0.15); }
+    #update-banner .banner-btn.primary { background: #2e6b2e; color: #fff; }
+    #update-banner .banner-btn.primary:hover { background: #3a803a; }
+    #update-banner .banner-dismiss {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 2px 6px;
+      margin-left: 4px;
+      line-height: 1;
+    }
+    #update-banner .banner-dismiss:hover { color: #ccc; }
+
     /* Main Content Area */
     .main-content {
       flex: 1;
@@ -972,6 +1029,17 @@
         </button>
       </div>
     </header>
+
+    <!-- Update Banner -->
+    <div id="update-banner" role="alert">
+      <i class="fas fa-arrow-circle-up banner-icon"></i>
+      <span class="banner-text" id="banner-message">A new version is available.</span>
+      <div class="banner-progress" id="banner-progress" style="display:none">
+        <div class="banner-progress-bar" id="banner-progress-bar"></div>
+      </div>
+      <button class="banner-btn primary" id="banner-action-btn">Download</button>
+      <button class="banner-dismiss" id="banner-dismiss-btn" title="Dismiss">&#x2715;</button>
+    </div>
 
     <!-- Main Content Area -->
     <main class="main-content">
@@ -1969,6 +2037,74 @@
         });
       }
     }
+
+    // Auto-update banner — shown once per startup
+    (function initUpdateBanner() {
+      const banner = document.getElementById('update-banner');
+      const bannerMsg = document.getElementById('banner-message');
+      const bannerProgress = document.getElementById('banner-progress');
+      const bannerProgressBar = document.getElementById('banner-progress-bar');
+      const bannerActionBtn = document.getElementById('banner-action-btn');
+      const bannerDismissBtn = document.getElementById('banner-dismiss-btn');
+
+      if (!banner) return;
+
+      let updateReady = false;
+      let bannerShown = false;
+
+      function showBanner(message, actionLabel) {
+        if (!bannerShown) bannerShown = true;
+        bannerMsg.innerHTML = message;
+        bannerActionBtn.textContent = actionLabel;
+        banner.classList.add('visible');
+      }
+
+      bannerDismissBtn.addEventListener('click', () => {
+        banner.classList.remove('visible');
+      });
+
+      bannerActionBtn.addEventListener('click', async () => {
+        if (updateReady) {
+          bannerActionBtn.textContent = 'Installing…';
+          bannerActionBtn.disabled = true;
+          if (api.installUpdate) api.installUpdate();
+        } else {
+          bannerActionBtn.textContent = 'Downloading…';
+          bannerActionBtn.disabled = true;
+          bannerProgress.style.display = 'block';
+          if (api.downloadUpdate) api.downloadUpdate();
+        }
+      });
+
+      if (api.onUpdaterAvailable) {
+        api.onUpdaterAvailable((info) => {
+          if (bannerShown) return; // only once per startup
+          showBanner(
+            `Update <strong>v${info.version}</strong> is available.`,
+            'Download'
+          );
+        });
+      }
+
+      if (api.onUpdaterDownloadProgress) {
+        api.onUpdaterDownloadProgress((progress) => {
+          bannerProgress.style.display = 'block';
+          bannerProgressBar.style.width = `${Math.round(progress.percent || 0)}%`;
+        });
+      }
+
+      if (api.onUpdaterDownloaded) {
+        api.onUpdaterDownloaded((info) => {
+          updateReady = true;
+          bannerProgress.style.display = 'none';
+          bannerActionBtn.disabled = false;
+          showBanner(
+            `v${info.version} downloaded — ready to install.`,
+            'Install & Restart'
+          );
+        });
+      }
+    })();
 
     // Handle weights updated event
     function handleWeightsUpdated(data) {

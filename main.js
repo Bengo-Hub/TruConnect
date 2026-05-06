@@ -1688,8 +1688,12 @@ ipcMain.handle('updater:get-current-version', () => {
   };
 });
 
-// Auto-updater event handlers
+// Auto-updater event handlers.
+// No blocking dialogs — all update state is surfaced via a banner in the renderer.
 if (autoUpdater) {
+  // User initiates the download from the banner; no silent auto-download.
+  autoUpdater.autoDownload = false;
+
   autoUpdater.on('checking-for-update', () => {
     log.info('Checking for update...');
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1708,11 +1712,8 @@ if (autoUpdater) {
     }
   });
 
-  autoUpdater.on('update-not-available', (info) => {
-    log.info('Update not available');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('updater:not-available');
-    }
+  autoUpdater.on('update-not-available', () => {
+    log.info('No update available');
   });
 
   autoUpdater.on('error', (err) => {
@@ -1723,11 +1724,6 @@ if (autoUpdater) {
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
-    let log_message = "Download speed: " + progressObj.bytesPerSecond;
-    log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-    log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-    log.info(log_message);
-
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:download-progress', {
         percent: progressObj.percent,
@@ -1739,32 +1735,13 @@ if (autoUpdater) {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    log.info('Update downloaded:', info.version);
-
-    const options = {
-      type: 'info',
-      title: 'Update Ready',
-      message: `A new version (${info.version}) of TruConnect has been downloaded and is ready to install.`,
-      detail: 'The application will restart to complete the update.',
-      buttons: ['Restart and Install', 'Later'],
-      defaultId: 0,
-      cancelId: 1
-    };
-
+    log.info('Update downloaded, notifying renderer banner:', info.version);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showMessageBox(mainWindow, options).then((result) => {
-        if (result.response === 0) {
-          log.info('User chose to restart and install update');
-          autoUpdater.quitAndInstall();
-        }
-      });
-
       mainWindow.webContents.send('updater:downloaded', {
         version: info.version,
         releaseNotes: info.releaseNotes
       });
     } else {
-      // If no window, just install
       autoUpdater.quitAndInstall();
     }
   });

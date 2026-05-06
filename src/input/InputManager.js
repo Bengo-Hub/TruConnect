@@ -523,20 +523,14 @@ class InputManager {
         const isMobileSource = ['paw', 'haenni', 'mcgs'].includes(this.activeSource);
         const captureMode = StateManager.getMode();
 
-        for (const weightData of results) {
-          if (isMobileSource || captureMode === 'mobile') {
-            // Mobile mode: store as current live weight, NOT as deck weight
-            // Use static method to ensure singleton consistency
-            // NOTE: setCurrentMobileWeight applies cumulative subtraction (raw - sessionGVW) for MCGS.
-            //       We must read back the corrected value so downstream (broadcast, renderer, capture) sees it.
+        if (isMobileSource || captureMode === 'mobile') {
+          // Mobile mode: process each weight result individually (axle-by-axle)
+          for (const weightData of results) {
             StateManager.setCurrentMobileWeight(weightData.weight, weightData.stable !== false);
             const correctedWeight = StateManager.getCurrentMobileWeight();
 
-            // Debug logging
             console.log(`[Mobile Weight] Raw: ${weightData.weight}kg, Corrected: ${correctedWeight}kg, Stable: ${weightData.stable !== false}`);
 
-            // Emit as mobile weight event (don't update deck weights)
-            // Use correctedWeight so cumulative subtraction is reflected everywhere (display, auto-detect, capture)
             EventBus.emit('input:weight', {
               ...weightData,
               source: this.activeSource,
@@ -544,23 +538,25 @@ class InputManager {
               isMobile: true,
               currentWeight: correctedWeight
             });
-          } else {
-            // Multideck mode: update state manager with deck weights.
-            // deck > 0 are individual deck weights (1–4).
-            // deck === 0 means GVW/Total from the indicator — we skip setDeckWeight
-            // for it because StateManager recalculates GVW as the sum of deck 1–4.
+          }
+        } else {
+          // Multideck mode: apply ALL deck weights to StateManager atomically first,
+          // then emit ONE event. This prevents broadcastWeights from firing with
+          // partial/intermediate state (e.g. deck3 updated but deck4 still old),
+          // which causes RDU flickering and stale weight display.
+          for (const weightData of results) {
             if (weightData.deck > 0) {
               StateManager.setDeckWeight(weightData.deck, weightData.weight);
             }
-
-            // Emit parsed weight (deck 0 GVW results are emitted but not stored)
-            EventBus.emit('input:weight', {
-              ...weightData,
-              source: this.activeSource,
-              protocol: this.config[this.activeSource]?.protocol,
-              isMobile: false
-            });
           }
+          // Single emit — state is now consistent across all decks
+          const representative = results[results.length - 1];
+          EventBus.emit('input:weight', {
+            ...representative,
+            source: this.activeSource,
+            protocol: this.config[this.activeSource]?.protocol,
+            isMobile: false
+          });
         }
       }
     } catch (error) {

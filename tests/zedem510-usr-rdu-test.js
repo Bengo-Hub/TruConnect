@@ -54,10 +54,14 @@ const PANELS = [
 
 // ─── Format (matches mygetinverse / serialout.js formatMessage with KELI) ──
 function formatRdu(weightKg) {
-  const str      = Math.abs(Math.round(weightKg)).toString();
+  // Use 8888 as default test value if weight is zero
+  const displayWeight = weightKg === 0 ? 8888 : weightKg;
+  const str      = Math.abs(Math.round(displayWeight)).toString();
   const reversed = str.split('').reverse().join('');
   const padded   = reversed.padEnd(8, '0');
-  return `=${padded}=`;
+  const result = `=${padded}=`;
+  const testNote = weightKg === 0 ? ' [TEST DEFAULT: 8888]' : '';
+  return result;
 }
 
 // ─── Connection state ───────────────────────────────────────────────────────
@@ -102,10 +106,12 @@ console.log(`  Send rate  : every ${SEND_INTERVAL_MS}ms`);
 console.log(`  Duration   : ${TEST_DURATION_MS / 1000}s`);
 console.log('\n  Input weights (from Zedem 510 example):');
 console.log('  "00,    00,  1100,  1000, 2100"');
-console.log('\n  Formatted RDU strings:');
+console.log('\n  Formatted RDU strings (with test defaults):');
 PANELS.forEach(p => {
   const w = EXAMPLE_WEIGHTS[p.deckKey];
-  console.log(`    ${p.label.padEnd(6)} (port ${p.usrPort})  weight=${String(w).padStart(5)}kg  →  ${formatRdu(w)}`);
+  const displayW = w === 0 ? 8888 : w;
+  const testNote = w === 0 ? ' [TEST DEFAULT: 8888]' : '';
+  console.log(`    ${p.label.padEnd(6)} (port ${p.usrPort})  weight=${String(w).padStart(5)}kg → ${String(displayW).padStart(5)}kg  →  ${formatRdu(w)}${testNote}`);
 });
 console.log('\n  Connecting to USR device...');
 
@@ -118,7 +124,9 @@ const sendTimer = setInterval(() => {
     if (!conn.connected || !conn.socket?.writable) return;
 
     const weight  = EXAMPLE_WEIGHTS[conn.deckKey];
+    const displayWeight = weight === 0 ? 8888 : weight;
     const message = formatRdu(weight);
+    const ts = new Date().toISOString().slice(11, 23);
 
     conn.socket.write(message, err => {
       if (err) {
@@ -128,7 +136,8 @@ const sendTimer = setInterval(() => {
         conn.sendCount++;
         if (conn.sendCount === 1 || conn.sendCount % 20 === 0) {
           // Log first send and then every 10 seconds
-          console.log(`  → [${conn.label}] port ${conn.usrPort}  sent "${message}"  (count: ${conn.sendCount})`);
+          const testNote = weight === 0 ? ' [TEST DEFAULT: 8888]' : '';
+          console.log(`[${ts}] 📤 [${conn.label}] port ${conn.usrPort}  weight: ${weight} kg → ${displayWeight} kg  →  "${message}"${testNote}  (count: ${conn.sendCount})`);
         }
       }
     });

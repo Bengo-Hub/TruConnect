@@ -35,7 +35,11 @@ const validInvokeChannels = [
   'pool:get-clients',
   // System
   'app:get-version',
-  'app:restart'
+  'app:restart',
+  // Auto-updater
+  'updater:check-for-updates',
+  'updater:download-update',
+  'updater:install-update'
 ];
 
 // Whitelist of valid receive channels
@@ -62,7 +66,13 @@ const validReceiveChannels = [
   'pool:client-joined',
   'pool:client-left',
   'pool:client-registered',
-  'pool:updated'
+  'pool:updated',
+  // Auto-updater events
+  'updater:checking',
+  'updater:available',
+  'updater:download-progress',
+  'updater:downloaded',
+  'updater:error'
 ];
 
 // Expose protected methods that allow the renderer process to use
@@ -409,7 +419,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   restart: () => {
     return ipcRenderer.invoke('app:restart');
-  }
+  },
+
+  // =====================
+  // Auto-updater APIs
+  // =====================
+
+  onUpdaterAvailable: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('updater:available', subscription);
+    return () => ipcRenderer.removeListener('updater:available', subscription);
+  },
+
+  onUpdaterDownloadProgress: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('updater:download-progress', subscription);
+    return () => ipcRenderer.removeListener('updater:download-progress', subscription);
+  },
+
+  onUpdaterDownloaded: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('updater:downloaded', subscription);
+    return () => ipcRenderer.removeListener('updater:downloaded', subscription);
+  },
+
+  checkForUpdates: () => ipcRenderer.invoke('updater:check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:download-update'),
+  installUpdate: () => ipcRenderer.invoke('updater:install-update')
 });
 
 console.log('electronAPI exposed to renderer');
