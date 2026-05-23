@@ -48,7 +48,7 @@
   "build": {
     "appId": "com.codevertex.truconnect",
     "productName": "TruConnect",
-    "copyright": "Copyright © 2026 Codevertex IT Solutions",
+    "copyright": "Copyright © 2026 Codevertex Africa Limited",
     "directories": {
       "output": "dist"
     },
