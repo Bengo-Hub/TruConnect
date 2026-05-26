@@ -891,6 +891,7 @@
                   <option value="paw">PAW - Portable Axle Weigher (Serial)</option>
                   <option value="haenni">Haenni WL - Portable Scale (API)</option>
                   <option value="mcgs">MCGS - Mobile Scale (Serial)</option>
+                  <option value="giropes">Giropes GI620 T8 - Mobile Scale (Serial)</option>
                 </optgroup>
                 <optgroup label="Multideck Indicators (Platform)">
                   <option value="indicator_zm">ZM Protocol (Avery Weigh-Tronix, Ohaus)</option>
@@ -1023,6 +1024,29 @@
                   <input type="checkbox" id="mcgs-cumulative">
                   <span class="toggle-slider"></span>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Giropes Configuration -->
+          <div class="form-section" id="giropes-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-weight-hanging"></i> Giropes GI620 T8 (Serial)</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Serial connection to Giropes GI620 T8 tandem axle weigher (Sipi 2 protocol). Streams continuously —
+              no query command required. Frame format: <code>$    100       0 830</code> (first numeric field is gross weight).
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="giropes-port">COM Port</label>
+                <input type="text" id="giropes-port" class="form-control" placeholder="COM3" value="COM3">
+              </div>
+              <div class="form-group">
+                <label for="giropes-baud">Baud Rate</label>
+                <select id="giropes-baud" class="form-control">
+                  <option value="9600" selected>9600</option>
+                  <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1622,6 +1646,7 @@
     const pawConfig = document.getElementById('paw-config');
     const haenniConfig = document.getElementById('haenni-config');
     const mcgsConfig = document.getElementById('mcgs-config');
+    const giropeConfig = document.getElementById('giropes-config');
     const indicatorConfig = document.getElementById('indicator-config');
     const customConfig = document.getElementById('custom-config');
     const indicatorConnection = document.getElementById('indicator-connection');
@@ -1632,6 +1657,7 @@
       pawConfig.style.display       = 'none';
       haenniConfig.style.display    = 'none';
       mcgsConfig.style.display      = 'none';
+      giropeConfig.style.display    = 'none';
       indicatorConfig.style.display = 'none';
       customConfig.style.display    = 'none';
 
@@ -1641,6 +1667,8 @@
         haenniConfig.style.display = 'block';
       } else if (source === 'mcgs') {
         mcgsConfig.style.display = 'block';
+      } else if (source === 'giropes') {
+        giropeConfig.style.display = 'block';
       } else if (source.startsWith('indicator_')) {
         indicatorConfig.style.display = 'block';
 
@@ -2078,6 +2106,21 @@
           },
           useCumulativeWeight: document.getElementById('mcgs-cumulative').checked
         };
+      } else if (source === 'giropes') {
+        config.giropes = {
+          enabled: true,
+          type: 'serial',
+          protocol: 'GIROPES',
+          serial: {
+            port: document.getElementById('giropes-port').value || 'COM3',
+            baudRate: parseInt(document.getElementById('giropes-baud').value) || 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            queryCommand: ''
+          },
+          useCumulativeWeight: false
+        };
       } else if (source.startsWith('indicator_') || source === 'custom') {
         const connectionType = document.getElementById('indicator-connection').value;
         const sourceKey = source === 'custom' ? 'custom' : source;
@@ -2262,6 +2305,13 @@
           document.getElementById('mcgs-cmd-zero').value = cmds?.zero || '';
           document.getElementById('mcgs-cmd-stop').value = cmds?.stop || '';
           document.getElementById('mcgs-cumulative').checked = mcgs.useCumulativeWeight || false;
+        }
+
+        // Populate Giropes config
+        if (settings.input.giropes) {
+          const giropes = settings.input.giropes;
+          document.getElementById('giropes-port').value = giropes.serial?.port || 'COM2';
+          document.getElementById('giropes-baud').value = giropes.serial?.baudRate || 9600;
         }
 
         // Populate indicator config (for any indicator_* source)

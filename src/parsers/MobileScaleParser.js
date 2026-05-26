@@ -21,6 +21,12 @@
  *    - May include separate scaleA/scaleB weights OR combined weight
  *    - Parser detects and handles both formats automatically
  *
+ * 4. Giropes Sipi 2 Mode (serial, continuous):
+ *    - Serial connection via COM2 (default), 9600/8N1, streams at 2ms intervals
+ *    - Frame format: "$    100       0 830" (Sipi 2 protocol)
+ *    - Fields: $ [gross weight] [net weight] [other]
+ *    - Weight = gross weight field (first number); combined total of both pads
+ *
  * Scale Weight Handling:
  *    - PAW: Always returns combined weight. scaleA = scaleB = total / 2
  *    - Haenni: May return scaleA/scaleB separately or as combined weight
@@ -43,6 +49,7 @@ class MobileScaleParser extends ParserInterface {
     // - 'paw-udp' for PAW UDP binary
     // - 'haenni' for Haenni REST JSON
     // - 'mcgs' for MCGS serial frames ("=SG+0000123kR")
+    // - 'giropes' for Giropes GI620 T8 Sipi 2 serial ("$    100       0 830")
     this.mode = config.mode || 'paw';
 
     // Track axle accumulation
@@ -65,8 +72,39 @@ class MobileScaleParser extends ParserInterface {
     if (this.mode === 'paw-udp') {
       return this.parsePawUdp(data);
     }
+    if (this.mode === 'giropes') {
+      return this.parseGiropes(data);
+    }
     // Default: PAW serial format
     return this.parsePawSerial(data);
+  }
+
+  /**
+   * Parse Giropes GI620 T8 Sipi 2 serial format: "$    100       0 830"
+   *
+   * Fields (space-delimited, variable padding):
+   *   $ [gross weight] [net weight] [unknown fixed field]
+   *   - gross: live combined weight of both pads in kg (first numeric field — changes with load)
+   *   - net: weight after tare subtraction (0 when no tare)
+   *   - unknown: last field appears static regardless of load (possibly calibration data)
+   *
+   * Device streams continuously at 2ms intervals; no query command required.
+   */
+  parseGiropes(data) {
+    if (!data) return null;
+
+    const raw = data.toString().trim();
+
+    // Sipi 2 frame: starts with $, followed by three space-separated numeric fields
+    const match = raw.match(/^\$\s+(\d+)\s+(\d+)\s+(\d+)/);
+    if (!match) return null;
+
+    // match[1] = gross axle weight (first numeric field)
+    const weight = parseInt(match[1], 10);
+    if (isNaN(weight) || weight < 0 || weight > 100000) return null;
+
+    this.scaleWeightMode = 'combined';
+    return this.createAxleResult(weight, raw, true);
   }
 
   /**
@@ -158,7 +196,7 @@ class MobileScaleParser extends ParserInterface {
    *
    * For PAW scales: weight is combined (A+B), so individual scales = weight/2
    * For Haenni: may have separate scaleA/scaleB or combined weight
-   * For MCGS: stream is live current axle weight; capture is done by frontend so we do not push to axles here.
+   * For MCGS/Giropes: stream is live current axle weight; capture is done by frontend so we do not push to axles here.
    *
    * @param {number} weight - Total axle weight (combined A+B for PAW)
    * @param {string} raw - Raw data string
@@ -166,9 +204,10 @@ class MobileScaleParser extends ParserInterface {
    * @param {Object} scaleWeights - Optional separate scale weights { scaleA, scaleB }
    */
   createAxleResult(weight, raw, stable = true, scaleWeights = null) {
-    // MCGS streams current axle weight; axle capture is done by user on console/frontend - do not auto-push to axles
-    const isMcgsStream = this.mode === 'mcgs';
-    if (!isMcgsStream && weight > 0 && weight !== this.axles[this.axles.length - 1]) {
+    // Streaming scales (MCGS, Giropes) push live weight continuously; axle capture is done by the user
+    // via the frontend — do not auto-push to axles array here.
+    const isStreamingMode = this.mode === 'mcgs' || this.mode === 'giropes';
+    if (!isStreamingMode && weight > 0 && weight !== this.axles[this.axles.length - 1]) {
       this.currentAxle++;
       this.axles.push(weight);
     }
@@ -366,6 +405,11 @@ class MobileScaleParser extends ParserInterface {
       return /SG.*\d+.*k[RX]?/i.test(str);
     }
 
+    if (this.mode === 'giropes') {
+      // Giropes Sipi 2: "$    100       0 830"
+      return /^\$\s+\d+\s+\d+\s+\d+/.test(data.toString().trim());
+    }
+
     if (this.mode === 'paw-udp') {
       // PAW UDP: need at least 4 bytes for float
       return Buffer.isBuffer(data) ? data.length >= 4 : data.length >= 4;
@@ -381,7 +425,10 @@ class MobileScaleParser extends ParserInterface {
     // PAW UDP uses packets (no terminator)
     // Haenni uses HTTP responses (no terminator)
     if (this.mode === 'paw' || this.mode === 'mcgs') {
-      return '\r\n';  // PAW serial uses CRLF
+      return '\r\n';
+    }
+    if (this.mode === 'giropes') {
+      return '\n\r'; // Giropes Sipi 2 sends LF then CR (reversed from standard)
     }
     return null;  // UDP and HTTP don't need terminators
   }
@@ -391,7 +438,8 @@ class MobileScaleParser extends ParserInterface {
       'paw': { protocol: 'PAW Serial', description: 'PAW weight console serial (ST,GS format)' },
       'paw-udp': { protocol: 'PAW UDP Binary', description: 'PAW portable scale UDP IEEE 754 float' },
       'haenni': { protocol: 'Haenni REST API', description: 'Haenni portable scale JSON API' },
-      'mcgs': { protocol: 'MCGS Serial', description: 'MCGS mobile scale serial (SG+NNNNNNkR frames)' }
+      'mcgs': { protocol: 'MCGS Serial', description: 'MCGS mobile scale serial (SG+NNNNNNkR frames)' },
+      'giropes': { protocol: 'Giropes Sipi 2', description: 'Giropes GI620 T8 mobile axle weigher (Sipi 2 serial)' }
     };
 
     const info = protocols[this.mode] || protocols['paw'];

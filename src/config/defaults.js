@@ -96,7 +96,7 @@ module.exports = {
   // Activating a new source automatically deactivates the current one
   input: {
     // Currently active input source
-    // Values: 'none' | 'paw' | 'haenni' | 'mcgs' | 'indicator_zm' | 'indicator_cardinal' |
+    // Values: 'none' | 'paw' | 'haenni' | 'mcgs' | 'giropes' | 'indicator_zm' | 'indicator_cardinal' |
     //         'indicator_cardinal2' | 'indicator_1310' | 'custom' | 'udp_legacy'
     activeSource: 'none',
 
@@ -175,6 +175,29 @@ module.exports = {
           zero: '\\x02D\\x03',       // STX 'D' ETX - zero/tare
           stop: 'STOP\\r\\n'         // Stop/cancel current session (if supported)
         }
+      }
+    },
+
+    // Giropes GI620 T8 Mobile Axle Weigher (Serial, Sipi 2 protocol)
+    // Streams combined axle weight continuously — no query command needed
+    // Frame format: "$    100       0 830" — gross weight is the last field
+    giropes: {
+      enabled: false,
+      type: 'serial',
+      protocol: 'GIROPES',
+      useCumulativeWeight: false,     // Giropes sends fresh gross weight each frame
+      metadata: {
+        make: 'Giropes',
+        model: 'GI620 T8',
+        capacity: 30000               // Max 30000kg per device interface
+      },
+      serial: {
+        port: 'COM3',                 // Default COM3 (update to match your system)
+        baudRate: 9600,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
+        queryCommand: ''              // Continuous streaming — no query needed
       }
     },
 

@@ -35,6 +35,8 @@ class ParserFactory {
       effectiveConfig = { ...config, mode: config.mode || 'haenni' };
     } else if (upperType === 'MCGS') {
       effectiveConfig = { ...config, mode: config.mode || 'mcgs' };
+    } else if (upperType === 'GIROPES') {
+      effectiveConfig = { ...config, mode: config.mode || 'giropes' };
     }
 
     return new ParserClass(effectiveConfig);
@@ -71,6 +73,7 @@ function registerParsers() {
   ParserFactory.register('PAW', MobileScaleParser);
   ParserFactory.register('HAENNI', MobileScaleParser);
   ParserFactory.register('MCGS', MobileScaleParser);
+  ParserFactory.register('GIROPES', MobileScaleParser);
   ParserFactory.register('CUSTOM', CustomParser);
 }
 

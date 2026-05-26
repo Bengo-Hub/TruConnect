@@ -19,6 +19,7 @@ const INPUT_SOURCES = [
   'paw',
   'haenni',
   'mcgs',
+  'giropes',
   'indicator_zm',
   'indicator_cardinal',
   'indicator_cardinal2',
@@ -520,7 +521,7 @@ class InputManager {
         const results = Array.isArray(result) ? result : [result];
 
         // Determine mode from active source - mobile sources (PAW, Haenni, MCGS) don't use deck weights
-        const isMobileSource = ['paw', 'haenni', 'mcgs'].includes(this.activeSource);
+        const isMobileSource = ['paw', 'haenni', 'mcgs', 'giropes'].includes(this.activeSource);
         const captureMode = StateManager.getMode();
 
         if (isMobileSource || captureMode === 'mobile') {
