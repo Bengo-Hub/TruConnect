@@ -4,9 +4,9 @@
 
 ### 1. ZM (Avery Weigh-Tronix)
 
-**Communication**: RS-232 Serial, 9600 baud, 8N1
+**Communication**: RS-232 Serial, 1200 baud default (9600 supported), 8N1
 
-**Command**: ENQ (0x05) sent periodically to request weight
+**Query Command**: ASCII `'W'` sent every 1000ms
 
 **Response Format**:
 ```
@@ -31,13 +31,17 @@ function parseZM(data) {
 }
 ```
 
+**Testing**: Use `node tests/zedem510-serial-read-test.js --port=COM1 --baud=1200`
+
 ---
 
 ### 2. Cardinal
 
 **Communication**: RS-232 Serial, 9600 baud, 8N1
 
-**Response Format**: Fixed-width 90-character string with comma-separated values
+**Query Mode**: Continuous output (no query command needed)
+
+**Response Format**: Fixed-width 90-character string with comma-separated values, sent continuously
 
 **Example**:
 ```
@@ -58,11 +62,15 @@ function parseCardinal(data) {
 }
 ```
 
+**Testing**: Use `node tests/indicator-live-test.js --protocol=CARDINAL --input=serial --port=COM1 --baud=9600`
+
 ---
 
 ### 3. Cardinal2
 
 **Communication**: RS-232 Serial, 9600 baud, 8N1
+
+**Query Command**: ENQ byte `0x05` sent every 1000ms
 
 **Response Format**: Per-deck messages with deck identifier
 
@@ -89,11 +97,15 @@ function parseCardinal2(data) {
 }
 ```
 
+**Testing**: Use `node tests/indicator-live-test.js --protocol=CARDINAL2 --input=serial --port=COM1 --baud=9600`
+
 ---
 
 ### 4. 1310 Indicator
 
 **Communication**: RS-232 Serial, 9600 baud, 8N1
+
+**Query Command**: ENQ byte `0x05` sent every 1000ms
 
 **Response Format**: Multi-line per scale
 
@@ -1222,6 +1234,180 @@ class UsrnConnection {
       console.error(`USR connection error: ${err.message}`);
       this.scheduleReconnect();
     });
+  }
+}
+```
+
+---
+
+## Testing Guide
+
+### Query Command Reference
+
+All indicators require specific query commands to retrieve weight data. Below is the reference for each protocol:
+
+| Protocol | Query Command | Type | Format | Frequency | Status |
+|----------|---------------|------|--------|-----------|--------|
+| **ZM (Zedem 510)** | `W` | ASCII char | `Buffer.from('W')` | 1000ms | ✅ Polling Mode |
+| **CARDINAL** | `null` | None | N/A | N/A | 📡 Continuous Output |
+| **CARDINAL2** | `0x05` | ENQ byte | `Buffer.from([0x05])` | 1000ms | ✅ Polling Mode |
+| **1310** | `0x05` | ENQ byte | `Buffer.from([0x05])` | 1000ms | ✅ Polling Mode |
+| **PAW** | `W` | ASCII char | `Buffer.from('W')` | 1000ms | ✅ Polling Mode |
+| **HAENNI** | API Poll | HTTP GET | N/A | 500ms | ✅ API Poll |
+| **MCGS/UDP** | Broadcast | UDP | Binary packet | N/A | 📡 Continuous Output |
+| **CUSTOM** | User-defined | Varies | Varies | Configurable | ⚙️ Configurable |
+
+**Legend:**
+- ✅ **Polling Mode**: Query command sent periodically to request weights
+- 📡 **Continuous Output**: Indicator sends data automatically, no query needed
+- ⚙️ **Configurable**: User specifies query command in configuration
+
+### Test Scripts
+
+All test scripts include comprehensive logging of:
+- Raw data received from indicators
+- Parsed weights for each deck
+- RDU strings sent to display units
+- Query commands and response times
+- Connection status and error handling
+
+#### 1. Zedem 510 Serial Read Test
+
+Tests basic ZM protocol serial reading with correct query command ('W'):
+
+```bash
+node tests/zedem510-serial-read-test.js                    # Default: COM1 @ 1200 baud
+node tests/zedem510-serial-read-test.js COM3 9600          # Custom port and baud
+PORT=COM4 BAUD=1200 node tests/zedem510-serial-read-test.js # Via environment variables
+node tests/zedem510-serial-read-test.js --parser-only       # Parser validation (no hardware)
+```
+
+**Features:**
+- Sends 'W' query every 1000ms
+- Logs raw serial data and parsed weights
+- Displays RDU format strings
+- Validates multi-deck parsing
+
+#### 2. Indicator Live Test (All Protocols)
+
+Universal indicator test supporting all protocols with correct query commands:
+
+```bash
+# ZM (Zedem 510)
+node tests/indicator-live-test.js --protocol=ZM --port=COM1 --baud=1200
+
+# Cardinal (continuous mode)
+node tests/indicator-live-test.js --protocol=CARDINAL --port=COM1 --baud=9600
+
+# Cardinal2 with ENQ query
+node tests/indicator-live-test.js --protocol=CARDINAL2 --port=COM1 --baud=9600
+
+# 1310 with ENQ query
+node tests/indicator-live-test.js --protocol=1310 --port=COM1 --baud=9600
+
+# TCP input (instead of serial)
+node tests/indicator-live-test.js --protocol=ZM --input=tcp --tcp-host=192.168.1.50 --tcp-port=4001
+
+# With RDU output disabled (parse only)
+node tests/indicator-live-test.js --protocol=ZM --no-rdu
+
+# With specific duration
+node tests/indicator-live-test.js --protocol=ZM --duration=60  # Run for 60 seconds
+```
+
+**Features:**
+- Supports all indicator protocols
+- Logs query commands sent (including hex representation)
+- Logs raw data received from indicators
+- Logs parsed weights with status flags
+- Sends weights to RDU with test defaults (8888 for zero weights)
+- Real-time weight display table
+- Connection status monitoring
+
+#### 3. Zedem 510 USR RDU Test
+
+Tests RDU output formatting with correct test defaults:
+
+```bash
+node tests/zedem510-usr-rdu-test.js                         # Default: 192.168.42.200
+USR_IP=192.168.0.100 node tests/zedem510-usr-rdu-test.js   # Custom USR IP
+```
+
+**Features:**
+- Connects to USR-TCP232 device at 5 ports (20-24)
+- Sends formatted weight strings every 500ms
+- Uses test default 8888 kg when weight is 0
+- Logs all sends with weight transformation details
+- Status report every 5 seconds
+- Graceful shutdown after 30 seconds
+
+### Test Output Examples
+
+#### Query Command Logging
+
+```
+[12:34:56.789] 📤 Query mode: ZM protocol — sending 'W' (ASCII) every 1000ms
+[12:34:56.789] 📤 Query sent (ZM): 'W' (ASCII) hex=57 count=1
+[12:34:57.801] 📤 Query sent (ZM): 'W' (ASCII) hex=57 count=2
+```
+
+#### Raw Data and Parsed Weights
+
+```
+[12:34:57.123] 📥 Raw data from serial port: "100, 200, 150, 175"
+[12:34:57.123] ✓ Parsed Deck 1: 100 KG [Stable]
+[12:34:57.123] ✓ Parsed Deck 2: 200 KG [Stable]
+[12:34:57.123] ✓ Parsed Deck 3: 150 KG [Stable]
+[12:34:57.123] ✓ Parsed Deck 4: 175 KG [Stable]
+```
+
+#### RDU Sending with Test Defaults
+
+```
+[12:34:57.124] 📤 Sending to Deck 1 (port 20): 100 kg → 100 kg → =00100000=
+[12:34:57.125] ✅ Successfully sent to Deck 1: =00100000=
+[12:34:57.125] 📤 Sending to Deck 2 (port 21): 0 kg → 8888 kg → =88880000= [TEST DEFAULT: 8888]
+[12:34:57.126] ✅ Successfully sent to Deck 2: =88880000=
+```
+
+### Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| No data received | Query command not sent | Verify query command in test script logs |
+| "No valid weights parsed" | Indicator protocol mismatch | Check indicator output format, verify protocol selection |
+| RDU connection failed | Wrong IP/port | Confirm USR device IP and port numbers |
+| "ENQ not working" | Protocol doesn't support polling | Check if protocol uses continuous mode instead |
+| Weight zero but RDU shows data | Test default not applied | Verify 8888 test value conversion in logs |
+
+### Query Command Implementation
+
+For implementing in production code:
+
+```javascript
+function getQueryCommand(protocol = 'ZM') {
+  // Protocol specifications for weight query commands
+  switch (protocol) {
+    case 'ZM':        return Buffer.from('W');       // ASCII 'W' for Zedem 510
+    case 'CARDINAL':  return null;                   // Continuous output mode
+    case 'CARDINAL2': return Buffer.from([0x05]);    // ENQ byte
+    case '1310':      return Buffer.from([0x05]);    // ENQ byte
+    default:          return null;
+  }
+}
+
+// Query timer implementation
+const queryCmd = getQueryCommand(protocol);
+if (queryCmd) {
+  setInterval(() => {
+    port.write(queryCmd, (err) => {
+      if (err) console.error(`Query error: ${err.message}`);
+    });
+  }, 1000);
+} else {
+  console.log('Continuous output mode - no query needed');
+}
+```
 
     this.socket.on('close', () => {
       this.scheduleReconnect();
