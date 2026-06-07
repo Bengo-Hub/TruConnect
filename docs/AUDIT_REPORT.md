@@ -74,39 +74,48 @@ This audit analyzed all iConnect implementations across the BengoBox project, th
 
 ### 2.1 Indicator Input Protocols
 
-#### ZM (Avery Weigh-Tronix)
+#### ZM (Avery Weigh-Tronix / Zedem 510)
 ```
-Input: ENQ (0x05) every 1000ms
-Output: "  5200 kg, 12440 kg, 0 kg,  0 kg,\r"
+Query Command: 'W' (ASCII character) sent every 1000ms
+Response: "  5200 kg, 12440 kg, 0 kg,  0 kg,\r"
+Format: Comma-separated weights for decks 1-4
+Baud: 1200 (default) or 9600 (configurable)
 Parsing: Split by comma, extract numeric, strip "kg"
 ```
 
 #### Cardinal (Fixed-width)
 ```
-Input: ENQ (0x05) every 1000ms
-Output: 90-character fixed-width string
-Parsing: Split by comma, take first 8 chars per field
+Query: Continuous output (no query command needed)
+Response: 90-character fixed-width string
+Format: Position-based field extraction
+Baud: 9600
+Parsing: Extract fields by position, typically positions 10, 20, 30, 40, 50 for decks
 ```
 
 #### Cardinal2 (Per-deck)
 ```
-Output: "Z1G 2        5500kg\r"
+Query Command: ENQ (0x05 byte) sent every 1000ms
+Response: "Z1G 2        5500kg\r"
 Format: [Status][Deck][Padding][Weight][Unit]
 Position 4-5: Deck number (1-4)
 Position 6 to end-2: Weight value
+Baud: 9600
 ```
 
 #### 1310 Indicator
 ```
-Output (multi-line):
+Query Command: ENQ (0x05 byte) sent every 1000ms
+Response (multi-line):
   "Scale No: 1\r\n"
   "G 5200kg\r\n"
 Parsing: Match "Scale No:" for deck, "G" prefix for gross
+Baud: 9600
 ```
 
 #### UDP Binary (Haenni/Load Cells)
 ```
-Port: 13805
+Port: 13805 (UDP broadcast)
+Query: Automatic broadcast (no query needed)
 Format: Binary packet, IEEE 754 floats
 Offset 120: Start of weight data
 Each deck: 5 bytes (1 stability + 4 weight bytes)
