@@ -2,13 +2,13 @@
 
 **Date**: 2026-01-28
 **Auditor**: Systems Architecture Engineer
-**Scope**: BengoBox/iConnect, BengoBox/TruLoad/TruConnect, Industry Research
+**Scope**: Codevertex/iConnect, Codevertex/TruLoad/TruConnect, Industry Research
 
 ---
 
 ## Executive Summary
 
-This audit analyzed all iConnect implementations across the BengoBox project, the current TruConnect middleware, and conducted industry research on weighing scale protocols, RDU integration, and serial communication standards. The goal is to inform the revamped TruConnect architecture.
+This audit analyzed all iConnect implementations across the Codevertex project, the current TruConnect middleware, and conducted industry research on weighing scale protocols, RDU integration, and serial communication standards. The goal is to inform the revamped TruConnect architecture.
 
 ---
 
@@ -436,7 +436,7 @@ The existing documentation is comprehensive and has been enhanced with research 
 ## Appendix: Key File Locations
 
 ```
-BengoBox/
+Codevertex/
 ├── iConnect/
 │   ├── iConnect-Juja/iConnect/       # Juja station
 │   ├── IConnect-Kanyonyo/            # Kanyonyo station
