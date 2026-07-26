@@ -253,7 +253,7 @@ Unauthorized distribution, modification, or reverse engineering is strictly proh
 ## 📞 Support
 
 For technical support or inquiries, please contact:
-- **Email**: support@codevertexitsolutions.com
+- **Email**: support@codevertexafrica.com
 - **Phone**: +254 743 793901
 - **Location**: Oginga Road, Pioneer House, Second Floor, Kisumu
 

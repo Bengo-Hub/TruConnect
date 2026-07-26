@@ -24,7 +24,7 @@ const defaults = require('../config/defaults');
 const SEED_VERSION = '2.3.0';
 
 const DEFAULT_ADMIN = {
-  email: 'admin@codevertexitsolutions.com',
+  email: 'admin@codevertexafrica.com',
   password: 'Admin@123!',
   role: 'admin'
 };
