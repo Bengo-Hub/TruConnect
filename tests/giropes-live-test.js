@@ -44,7 +44,7 @@ let rejectedCount = 0;
 port.open((err) => {
   if (err) {
     console.error(`[ERROR] Cannot open ${PORT}: ${err.message}`);
-    console.error('  - Check the port name (e.g. COM2, COM3, COM4)');
+    console.error('  - Check the port name (e.g. COM2, COM3, COM5)');
     console.error('  - Make sure no other program (PuTTY, TruConnect) is using the port');
     process.exit(1);
   }
