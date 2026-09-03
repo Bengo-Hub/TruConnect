@@ -345,6 +345,81 @@ class DatabaseManager {
             UPDATE rdu_models SET is_active = 0 WHERE id != NEW.id AND is_active = 1;
           END;
         `
+      },
+      {
+        // Durable offline capture + sync queue (Phase 3).
+        // Each queued network call (autoweigh or complete) gets its own client_local_id
+        // (the backend's ClientLocalId idempotency key) - never share one id across both,
+        // or the second call would short-circuit on the idempotent-return path and leave
+        // the transaction stuck at CaptureStatus="auto" forever.
+        // local_session_id groups the autoweigh+complete pair for one physical weighing so
+        // the complete row can wait for its autoweigh sibling to sync and inherit its
+        // resolved backend_transaction_id as weighingTransactionId.
+        name: '014_create_weighing_queue',
+        sql: `
+          CREATE TABLE IF NOT EXISTS weighing_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            local_session_id TEXT NOT NULL,
+            client_local_id TEXT UNIQUE NOT NULL,
+            request_type TEXT NOT NULL CHECK(request_type IN ('autoweigh', 'complete')),
+            endpoint TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'sending', 'dead_letter', 'synced')),
+            attempts INTEGER NOT NULL DEFAULT 0,
+            max_attempts INTEGER NOT NULL DEFAULT 10,
+            next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_error TEXT,
+            backend_transaction_id TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_weighing_queue_status ON weighing_queue(status);
+          CREATE INDEX IF NOT EXISTS idx_weighing_queue_session ON weighing_queue(local_session_id);
+          CREATE INDEX IF NOT EXISTS idx_weighing_queue_next_attempt ON weighing_queue(next_attempt_at);
+        `
+      },
+      {
+        // Backend-synced mirror of truload-backend's Station catalog (Phase 4).
+        // Separate from the existing operator-typed `stations`/`station_bounds` tables -
+        // this is a read-only mapping layer used to resolve the local station.code to the
+        // backend's station GUID and to detect drift, not a replacement for local config.
+        name: '015_create_backend_stations',
+        sql: `
+          CREATE TABLE IF NOT EXISTS backend_stations (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            station_type TEXT,
+            organization_id TEXT,
+            organization_name TEXT,
+            supports_bidirectional INTEGER NOT NULL DEFAULT 0,
+            bound_a_code TEXT,
+            bound_b_code TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            raw_json TEXT NOT NULL,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_backend_stations_code ON backend_stations(code);
+        `
+      },
+      {
+        // Backend-synced mirror of truload-backend's AxleConfiguration catalog (Phase 4).
+        // TruConnect has no local equivalent today - this is a brand new mirror table.
+        name: '016_create_backend_axle_configurations',
+        sql: `
+          CREATE TABLE IF NOT EXISTS backend_axle_configurations (
+            id TEXT PRIMARY KEY,
+            axle_code TEXT NOT NULL,
+            axle_name TEXT,
+            axle_number INTEGER NOT NULL DEFAULT 0,
+            gvw_permissible_kg INTEGER NOT NULL DEFAULT 0,
+            is_standard INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            raw_json TEXT NOT NULL,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_backend_axle_configs_code ON backend_axle_configurations(axle_code);
+        `
       }
     ];
   }

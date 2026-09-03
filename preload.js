@@ -10,6 +10,14 @@ const validInvokeChannels = [
   'get-settings',
   'reset-settings',
   'test-backend-connection',
+  // Sync queue (offline capture)
+  'sync-queue:get-status',
+  'sync-queue:retry-dead-letters',
+  'sync-queue:sync-now',
+  // Config sync (Stations + AxleConfiguration)
+  'config-sync:run',
+  'config-sync:get-status',
+  'config-sync:apply-backend-values',
   // Authentication
   'auth:login',
   'auth:logout',

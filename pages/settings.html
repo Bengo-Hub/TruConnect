@@ -635,6 +635,93 @@
       gap: 8px;
     }
 
+    /* Queue stats + drift banner (offline sync / config sync) */
+    .queue-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+
+    .queue-stat {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .queue-stat .value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .queue-stat .label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .queue-stat.dead-letter .value {
+      color: var(--danger);
+    }
+
+    .queue-stat.pending .value {
+      color: var(--warning);
+    }
+
+    .queue-stat.synced .value {
+      color: var(--success);
+    }
+
+    .drift-banner {
+      display: none;
+      background: rgba(255, 193, 7, 0.1);
+      border: 1px solid rgba(255, 193, 7, 0.4);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 15px;
+    }
+
+    .drift-banner.show {
+      display: block;
+    }
+
+    .drift-banner-title {
+      color: var(--warning);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .drift-field-list {
+      list-style: none;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .drift-field-list li {
+      padding: 4px 0;
+    }
+
+    .drift-field-list strong {
+      color: var(--text);
+    }
+
+    .sync-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
     /* About section */
     .about-card {
       text-align: center;
@@ -1490,6 +1577,71 @@
                 </div>
               </div>
             </div>
+
+            <div class="form-section">
+              <h3 class="form-section-title"><i class="fas fa-database"></i> Offline Sync Queue</h3>
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Weighings captured while offline are stored locally and synced automatically once the backend is
+                reachable. Nothing is ever lost on the happy path or on failure.
+              </p>
+              <div class="queue-stats">
+                <div class="queue-stat pending">
+                  <div class="value" id="queue-stat-pending">0</div>
+                  <div class="label">Pending</div>
+                </div>
+                <div class="queue-stat">
+                  <div class="value" id="queue-stat-sending">0</div>
+                  <div class="label">Sending</div>
+                </div>
+                <div class="queue-stat dead-letter">
+                  <div class="value" id="queue-stat-dead-letter">0</div>
+                  <div class="label">Dead Letter</div>
+                </div>
+                <div class="queue-stat synced">
+                  <div class="value" id="queue-stat-synced">0</div>
+                  <div class="label">Synced</div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-secondary" id="btn-retry-dead-letters" style="padding: 10px 20px;">
+                  <i class="fas fa-redo"></i>
+                  Retry Dead Letters
+                </button>
+                <button class="btn btn-secondary" id="btn-sync-queue-now" style="padding: 10px 20px;">
+                  <i class="fas fa-sync"></i>
+                  Sync Queue Now
+                </button>
+                <span id="queue-action-result" style="font-size: 0.9rem;"></span>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h3 class="form-section-title"><i class="fas fa-map-marker-alt"></i> Station &amp; Axle Config Sync</h3>
+              <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                Pulls the Stations and Axle Configuration catalog from the TruLoad backend, resolves this station's
+                code to its backend GUID, and checks for drift between backend values and this device's local config.
+              </p>
+              <div class="sync-meta-row">
+                <span>Last synced: <span id="config-sync-last-synced">Never</span></span>
+                <span id="config-sync-error" style="color: var(--danger);"></span>
+              </div>
+              <button class="btn btn-secondary" id="btn-config-sync-now" style="padding: 10px 20px;">
+                <i class="fas fa-cloud-download-alt"></i>
+                Sync Now
+              </button>
+
+              <div class="drift-banner" id="drift-banner">
+                <div class="drift-banner-title">
+                  <i class="fas fa-exclamation-triangle"></i>
+                  Local config differs from the backend
+                </div>
+                <ul class="drift-field-list" id="drift-field-list"></ul>
+                <button class="btn btn-primary" id="btn-apply-backend-values" style="padding: 8px 18px;">
+                  <i class="fas fa-check"></i>
+                  Apply Backend Values
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1986,6 +2138,145 @@
       }
     }
 
+    // ============ Offline Sync Queue Status ============
+
+    async function refreshQueueStatus() {
+      if (!api.invoke) return;
+      try {
+        const result = await api.invoke('sync-queue:get-status');
+        if (!result || !result.success) return;
+        const s = result.status;
+        document.getElementById('queue-stat-pending').textContent = s.pending || 0;
+        document.getElementById('queue-stat-sending').textContent = s.sending || 0;
+        document.getElementById('queue-stat-dead-letter').textContent = s.dead_letter || 0;
+        document.getElementById('queue-stat-synced').textContent = s.synced || 0;
+      } catch (error) {
+        console.warn('Failed to refresh sync queue status:', error);
+      }
+    }
+
+    document.getElementById('btn-retry-dead-letters')?.addEventListener('click', async () => {
+      const resultEl = document.getElementById('queue-action-result');
+      resultEl.textContent = 'Requeuing...';
+      resultEl.style.color = 'var(--primary)';
+      try {
+        const result = await api.invoke('sync-queue:retry-dead-letters');
+        if (result.success) {
+          resultEl.textContent = `Requeued ${result.requeued} row(s)`;
+          resultEl.style.color = 'var(--success)';
+        } else {
+          resultEl.textContent = result.error || 'Failed';
+          resultEl.style.color = 'var(--danger)';
+        }
+      } catch (error) {
+        resultEl.textContent = 'Error: ' + error.message;
+        resultEl.style.color = 'var(--danger)';
+      }
+      refreshQueueStatus();
+    });
+
+    document.getElementById('btn-sync-queue-now')?.addEventListener('click', async () => {
+      const resultEl = document.getElementById('queue-action-result');
+      resultEl.textContent = 'Syncing...';
+      resultEl.style.color = 'var(--primary)';
+      try {
+        const result = await api.invoke('sync-queue:sync-now');
+        if (result.success) {
+          resultEl.textContent = `Processed ${result.processed} row(s)`;
+          resultEl.style.color = 'var(--success)';
+        } else {
+          resultEl.textContent = result.error || 'Failed';
+          resultEl.style.color = 'var(--danger)';
+        }
+      } catch (error) {
+        resultEl.textContent = 'Error: ' + error.message;
+        resultEl.style.color = 'var(--danger)';
+      }
+      refreshQueueStatus();
+    });
+
+    // ============ Config Sync (Stations + AxleConfiguration) ============
+
+    function renderDrift(drift) {
+      const banner = document.getElementById('drift-banner');
+      const list = document.getElementById('drift-field-list');
+      if (!drift || !drift.hasDrift || !drift.fields?.length) {
+        banner.classList.remove('show');
+        list.innerHTML = '';
+        return;
+      }
+
+      const fieldLabels = {
+        name: 'Station name',
+        bidirectional: 'Bidirectional support',
+        boundACode: 'Bound A code',
+        boundBCode: 'Bound B code'
+      };
+
+      list.innerHTML = drift.fields.map(f => `
+        <li><strong>${fieldLabels[f.field] || f.field}</strong>: local = "${f.local}", backend = "${f.backend}"</li>
+      `).join('');
+      banner.classList.add('show');
+    }
+
+    async function refreshConfigSyncStatus() {
+      if (!api.invoke) return;
+      try {
+        const result = await api.invoke('config-sync:get-status');
+        if (!result || !result.success) return;
+        const s = result.status;
+        document.getElementById('config-sync-last-synced').textContent = s.lastSyncedAt
+          ? new Date(s.lastSyncedAt).toLocaleString()
+          : 'Never';
+        document.getElementById('config-sync-error').textContent = s.lastError || '';
+        renderDrift(s.drift);
+      } catch (error) {
+        console.warn('Failed to refresh config sync status:', error);
+      }
+    }
+
+    document.getElementById('btn-config-sync-now')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-config-sync-now');
+      const errEl = document.getElementById('config-sync-error');
+      btn.disabled = true;
+      errEl.textContent = '';
+      try {
+        const result = await api.invoke('config-sync:run');
+        if (!result.success) {
+          errEl.textContent = result.error || 'Sync failed';
+        } else if (result.error) {
+          // Partial failure (e.g. one of Stations/AxleConfiguration fetch failed) -
+          // resolution from the local cache may still have succeeded.
+          errEl.textContent = result.error;
+        }
+      } catch (error) {
+        errEl.textContent = error.message;
+      }
+      btn.disabled = false;
+      refreshConfigSyncStatus();
+    });
+
+    document.getElementById('btn-apply-backend-values')?.addEventListener('click', async () => {
+      try {
+        const result = await api.invoke('config-sync:apply-backend-values');
+        if (result.success) {
+          showToast('Backend values applied');
+          loadSettings();
+        } else {
+          showToast(result.error || 'Failed to apply backend values', 'error');
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+      }
+      refreshConfigSyncStatus();
+    });
+
+    // Poll both panels periodically while Settings is open (cheap local IPC calls)
+    setInterval(() => {
+      refreshQueueStatus();
+      refreshConfigSyncStatus();
+    }, 5000);
+
     // ============ Output URL Display ============
 
     const wsPort = document.getElementById('ws-port');
@@ -2416,6 +2707,8 @@
       updateUrlDisplays();
       generatePanelConfigs();
       applyRestrictions();
+      refreshQueueStatus();
+      refreshConfigSyncStatus();
     });
   </script>
 </body>

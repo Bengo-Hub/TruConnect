@@ -60,6 +60,8 @@ const StateManager = require('./src/core/StateManager');
 const OutputManager = require('./src/output/OutputManager');
 const InputManager = require('./src/input/InputManager');
 const BackendClient = require('./src/backend/BackendClient');
+const SyncQueue = require('./src/backend/SyncQueue');
+const ConfigSyncService = require('./src/backend/ConfigSyncService');
 
 // Keep serialout for RDU communication (legacy, will be replaced)
 const RDUCommunicator = require('./serialout');
@@ -293,6 +295,31 @@ async function initializeApp() {
       });
     }
     console.log('Backend client initialized');
+
+    // Start connectivity polling (30s) - emits backend:online/backend:offline only on
+    // state transitions, and drains the sync queue immediately on the online edge.
+    BackendClient.startConnectivityPoll(30000);
+
+    // Start the offline sync queue's own periodic drain (independent of the connectivity
+    // poll, so due retries/backoffs still get processed between poll ticks) and run one
+    // drain pass immediately in case rows were left over from a previous run.
+    SyncQueue.startPeriodicDrain(20000);
+    SyncQueue.drain().catch(err => console.error('Initial sync queue drain failed:', err.message));
+
+    // Config sync (Stations + AxleConfiguration mirror, station.code -> backend GUID
+    // resolution). initialize() resolves BackendClient.config.stationId from whatever
+    // is already cached locally with NO network call, so this works even if the app
+    // starts up fully offline. Periodic cadence: every 6h (slow-moving reference data),
+    // plus on-demand (Settings "Sync Now") and on the backend:online reconnect edge
+    // (wired inside ConfigSyncService itself).
+    console.log('Initializing config sync service...');
+    ConfigSyncService.initialize({ periodicIntervalMs: 6 * 60 * 60 * 1000 });
+    if (backendConfig.enabled && backendConfig.baseUrl) {
+      ConfigSyncService.runSync().catch(err => {
+        console.error('Initial config sync failed (will retry on schedule/reconnect):', err.message);
+      });
+    }
+    console.log('Config sync service initialized');
 
     // Initialize CloudConnectionManager for local/live mode switching
     console.log('Initializing cloud connection manager...');
@@ -933,6 +960,10 @@ ipcMain.handle('save-settings', async (event, settings) => {
       const BackendClient = require('./src/backend/BackendClient');
       BackendClient.configure(settings.backend);
 
+      // Restart the connectivity poll so the next tick re-evaluates from scratch
+      // instead of waiting out whatever was left of the previous interval.
+      BackendClient.restartConnectivityPoll(30000);
+
       // If enabled, check connection in background
       if (settings.backend.enabled && settings.backend.baseUrl) {
         BackendClient.checkConnection().then(connected => {
@@ -990,6 +1021,72 @@ ipcMain.handle('test-backend-connection', async (event, config) => {
     } else {
       return { success: false, error: client.lastError || 'Authentication failed' };
     }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// =============================================
+// Sync Queue Handlers (Phase 3 - offline capture)
+// =============================================
+
+// Get queue status: pending/sending/dead_letter/synced counts
+ipcMain.handle('sync-queue:get-status', async () => {
+  try {
+    return { success: true, status: SyncQueue.getStatus() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Manually retry all dead-letter rows
+ipcMain.handle('sync-queue:retry-dead-letters', async () => {
+  try {
+    const result = SyncQueue.retryDeadLetters();
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Manually trigger a drain pass (e.g. operator believes connectivity is back)
+ipcMain.handle('sync-queue:sync-now', async () => {
+  try {
+    const result = await SyncQueue.drain();
+    return { success: true, ...result, status: SyncQueue.getStatus() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// =============================================
+// Config Sync Handlers (Phase 4 - Stations + AxleConfiguration)
+// =============================================
+
+// On-demand "Sync Now" - fetches Stations/AxleConfiguration, resolves station GUID, computes drift
+ipcMain.handle('config-sync:run', async () => {
+  try {
+    const result = await ConfigSyncService.runSync();
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get last sync status + drift result for the Settings UI
+ipcMain.handle('config-sync:get-status', async () => {
+  try {
+    return { success: true, status: ConfigSyncService.getStatus() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Apply the backend's values over local operator-typed station config (explicit action only)
+ipcMain.handle('config-sync:apply-backend-values', async () => {
+  try {
+    const result = ConfigSyncService.applyBackendValues();
+    return { success: true, ...result };
   } catch (error) {
     return { success: false, error: error.message };
   }

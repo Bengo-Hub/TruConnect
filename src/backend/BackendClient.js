@@ -5,6 +5,7 @@
  * Supports both online (backend API) and offline (local storage) modes.
  */
 
+const crypto = require('crypto');
 const EventBus = require('../core/EventBus');
 const ConfigManager = require('../config/ConfigManager');
 
@@ -45,12 +46,18 @@ class BackendClient {
       axleConfigurationId: null,
       weighingMode: null,    // 'mobile' or 'multideck'
       isAutoweighSent: false,
-      autoweighGvw: 0
+      autoweighGvw: 0,
+      localSessionId: null    // Groups this vehicle's autoweigh+complete sync-queue rows
     };
 
     // Connection state
     this.isConnected = false;
     this.lastError = null;
+
+    // Connectivity poll state (started via startConnectivityPoll)
+    this._connectivityPollTimer = null;
+    this._connectivityPollIntervalMs = 30000;
+    this._lastKnownOnline = null; // null = unknown until first poll
   }
 
   /**
@@ -190,6 +197,64 @@ class BackendClient {
   }
 
   /**
+   * Start polling checkConnection() on an interval and emit backend:online/backend:offline
+   * ONLY on state transitions (not every poll). On the online edge, also kick an immediate
+   * SyncQueue drain so queued weighings don't wait for the queue's own periodic drain tick.
+   */
+  startConnectivityPoll(intervalMs) {
+    this.stopConnectivityPoll();
+    this._connectivityPollIntervalMs = intervalMs || this._connectivityPollIntervalMs;
+    this._lastKnownOnline = null; // force a fresh determination on the next tick
+
+    this._connectivityPollTimer = setInterval(() => {
+      this._pollConnection().catch(err => console.error('[BackendClient] Connectivity poll error:', err.message));
+    }, this._connectivityPollIntervalMs);
+    if (this._connectivityPollTimer.unref) this._connectivityPollTimer.unref();
+
+    console.log(`[BackendClient] Connectivity poll started (every ${this._connectivityPollIntervalMs}ms)`);
+  }
+
+  stopConnectivityPoll() {
+    if (this._connectivityPollTimer) {
+      clearInterval(this._connectivityPollTimer);
+      this._connectivityPollTimer = null;
+    }
+  }
+
+  /**
+   * Stop and restart the poll (e.g. after backend settings change) so the next tick
+   * re-evaluates connectivity from scratch instead of waiting out the old interval.
+   */
+  restartConnectivityPoll(intervalMs) {
+    this.startConnectivityPoll(intervalMs || this._connectivityPollIntervalMs);
+  }
+
+  async _pollConnection() {
+    if (!this.config.enabled || !this.config.baseUrl) return;
+
+    const wasOnline = this._lastKnownOnline;
+    const isOnline = await this.checkConnection();
+
+    if (isOnline === wasOnline) return; // no state transition - stay quiet
+
+    this._lastKnownOnline = isOnline;
+
+    if (isOnline) {
+      console.log('[BackendClient] Backend connectivity restored (online)');
+      this.eventBus.emitEvent('backend:online', { baseUrl: this.config.baseUrl });
+      try {
+        const SyncQueue = require('./SyncQueue');
+        SyncQueue.drain().catch(err => console.error('[SyncQueue] drain-on-reconnect error:', err.message));
+      } catch (err) {
+        console.error('[BackendClient] Failed to trigger drain on reconnect:', err.message);
+      }
+    } else {
+      console.log('[BackendClient] Backend connectivity lost (offline)');
+      this.eventBus.emitEvent('backend:offline', { baseUrl: this.config.baseUrl });
+    }
+  }
+
+  /**
    * Start a new weighing session
    * Resets session state and prepares for new vehicle
    */
@@ -203,7 +268,11 @@ class BackendClient {
       axleConfigurationId: vehicleInfo.axleConfigurationId || null,
       weighingMode: vehicleInfo.weighingMode || null,
       isAutoweighSent: false,
-      autoweighGvw: 0
+      autoweighGvw: 0,
+      // Fresh id for this physical weighing - groups its autoweigh+complete sync-queue rows.
+      // Generated here (not lazily inside sendAutoweigh) so it's stable across both calls
+      // even if the app restarts between them.
+      localSessionId: crypto.randomUUID()
     };
 
     console.log(`[BackendClient] Session started for vehicle: ${this.currentSession.vehicleRegNumber || 'unknown'}${this.currentSession.weighingTransactionId ? ` (txnId: ${this.currentSession.weighingTransactionId})` : ''}`);
@@ -223,10 +292,9 @@ class BackendClient {
       return null;
     }
 
-    const authHeader = await this._getAuthHeader();
-    if (!authHeader) {
-      console.error('[BackendClient] Cannot send autoweigh - authentication failed');
-      return null;
+    if (!this.currentSession.localSessionId) {
+      // Defensive fallback - normally set by startSession()
+      this.currentSession.localSessionId = crypto.randomUUID();
     }
 
     const payload = {
@@ -247,25 +315,18 @@ class BackendClient {
       weighingTransactionId: this.currentSession.weighingTransactionId || null
     };
 
-    console.log(`[BackendClient] Sending autoweigh: ${payload.axles.length} axles, GVW=${weighingData.gvw}kg`);
+    console.log(`[BackendClient] Capturing autoweigh (durable): ${payload.axles.length} axles, GVW=${weighingData.gvw}kg`);
 
-    try {
-      const response = await this._fetch(`${this.config.baseUrl}${this.config.autoweighEndpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(payload)
-      });
+    // Durable capture: the row lands in SQLite via _queueForSync BEFORE any network
+    // attempt. attempt() then tries to send it immediately - if that succeeds we get
+    // the same synchronous result as before; if not, the row stays queued and the
+    // sync queue's own retry/backoff/drain machinery takes over.
+    const queueRow = this._queueForSync('autoweigh', payload, this.currentSession.localSessionId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Backend returned ${response.status}: ${errorText}`);
-      }
+    const SyncQueue = require('./SyncQueue');
+    const result = await SyncQueue.attempt(queueRow.id);
 
-      const result = await response.json();
-
+    if (result) {
       // Update session with transaction info
       this.currentSession.transactionId = result.weighingId;
       this.currentSession.isAutoweighSent = true;
@@ -279,22 +340,15 @@ class BackendClient {
         gvw: result.gvwMeasuredKg,
         captureStatus: result.captureStatus
       });
-
-      return result;
-    } catch (error) {
-      console.error('[BackendClient] Autoweigh submission failed:', error.message);
-      this.lastError = error.message;
-
-      // Queue for later sync if offline
-      this._queueForSync('autoweigh', payload);
-
+    } else {
+      console.log('[BackendClient] Autoweigh captured locally and queued - will sync automatically when the backend is reachable');
       this.eventBus.emitEvent('backend:autoweigh-failed', {
-        error: error.message,
+        error: 'Queued locally for later sync (offline or backend error)',
         payload
       });
-
-      return null;
     }
+
+    return result;
   }
 
   /**
@@ -310,11 +364,11 @@ class BackendClient {
       return null;
     }
 
-    const authHeader = await this._getAuthHeader();
-    if (!authHeader) {
-      console.error('[BackendClient] Cannot complete session - authentication failed');
-      return null;
+    if (!this.currentSession.localSessionId) {
+      // Defensive fallback - normally set by startSession()
+      this.currentSession.localSessionId = crypto.randomUUID();
     }
+    const localSessionId = this.currentSession.localSessionId;
 
     const payload = {
       stationId: this.config.stationId,
@@ -331,28 +385,23 @@ class BackendClient {
       source: 'TruConnect',
       captureSource: 'frontend',
       isFinalCapture: true,  // This is the final capture from frontend
+      // Left null unless a frontend already synced a transaction id - the sync queue
+      // resolves this from the sibling autoweigh row's backend_transaction_id once
+      // that row has synced (see SyncQueue.attempt's dependency-chaining logic).
       weighingTransactionId: this.currentSession.weighingTransactionId || null
     };
 
-    console.log(`[BackendClient] Completing session: ${payload.axles.length} axles, GVW=${finalData.gvw}kg`);
+    console.log(`[BackendClient] Capturing session completion (durable): ${payload.axles.length} axles, GVW=${finalData.gvw}kg`);
 
-    try {
-      const response = await this._fetch(`${this.config.baseUrl}${this.config.autoweighEndpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(payload)
-      });
+    // Durable capture, same pattern as sendAutoweigh: write first, attempt second.
+    // Note this row may not be eligible to send yet if its autoweigh sibling hasn't
+    // synced - attempt() will simply leave it pending in that case (see SyncQueue).
+    const queueRow = this._queueForSync('complete', payload, localSessionId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Backend returned ${response.status}: ${errorText}`);
-      }
+    const SyncQueue = require('./SyncQueue');
+    const result = await SyncQueue.attempt(queueRow.id);
 
-      const result = await response.json();
-
+    if (result) {
       console.log(`[BackendClient] Session completed: TransactionId=${result.weighingId}, Status=${result.controlStatus}`);
 
       this.eventBus.emitEvent('backend:session-completed', {
@@ -363,25 +412,21 @@ class BackendClient {
         controlStatus: result.controlStatus,
         captureStatus: result.captureStatus
       });
-
-      // Reset session after completion
-      this.resetSession();
-
-      return result;
-    } catch (error) {
-      console.error('[BackendClient] Session completion failed:', error.message);
-      this.lastError = error.message;
-
-      // Queue for later sync
-      this._queueForSync('complete', payload);
-
+    } else {
+      console.log('[BackendClient] Session completion captured locally and queued - will sync automatically (waiting on its autoweigh sibling and/or backend reachability)');
       this.eventBus.emitEvent('backend:complete-failed', {
-        error: error.message,
+        error: 'Queued locally for later sync (offline, dependency pending, or backend error)',
         payload
       });
-
-      return null;
     }
+
+    // Reset session regardless of sync outcome: the physical weighing is already
+    // durably captured in the sync queue (payload is self-contained), so the operator
+    // must be free to start the next vehicle immediately rather than being blocked on
+    // this one's sync completing.
+    this.resetSession();
+
+    return result;
   }
 
   /**
@@ -413,7 +458,8 @@ class BackendClient {
       axleConfigurationId: null,
       weighingMode: null,
       isAutoweighSent: false,
-      autoweighGvw: 0
+      autoweighGvw: 0,
+      localSessionId: null
     };
   }
 
@@ -497,18 +543,35 @@ class BackendClient {
   }
 
   /**
-   * Queue failed request for later sync (offline support)
+   * Durably persist a request to the sync queue (SQLite) BEFORE any network attempt.
+   * This is the "durable capture" primitive both sendAutoweigh and completeSession use -
+   * a real delegation to SyncQueue.enqueue(), not the old stub that only console.log'd.
+   *
+   * @param {'autoweigh'|'complete'} type
+   * @param {Object} payload
+   * @param {string} localSessionId - groups this call with its autoweigh/complete sibling
+   * @returns {Object} the inserted weighing_queue row
    */
-  _queueForSync(type, payload) {
-    // For now, just log - could be extended to store in SQLite
-    console.log(`[BackendClient] Queued ${type} for later sync:`, payload.vehicleRegNumber);
+  _queueForSync(type, payload, localSessionId) {
+    const SyncQueue = require('./SyncQueue');
+    const row = SyncQueue.enqueue({
+      localSessionId: localSessionId || this.currentSession.localSessionId || crypto.randomUUID(),
+      requestType: type,
+      endpoint: this.config.autoweighEndpoint,
+      payload
+    });
 
-    // Could emit event for UI notification
+    console.log(`[BackendClient] Queued ${type} for sync (queueId=${row.id}):`, payload.vehicleRegNumber);
+
     this.eventBus.emitEvent('backend:queued-for-sync', {
       type,
       vehicleRegNumber: payload.vehicleRegNumber,
+      queueId: row.id,
+      clientLocalId: row.client_local_id,
       timestamp: new Date().toISOString()
     });
+
+    return row;
   }
 }
 
@@ -527,6 +590,18 @@ BackendClient.authenticate = function() {
 
 BackendClient.checkConnection = function() {
   return BackendClient.getInstance().checkConnection();
+};
+
+BackendClient.startConnectivityPoll = function(intervalMs) {
+  return BackendClient.getInstance().startConnectivityPoll(intervalMs);
+};
+
+BackendClient.stopConnectivityPoll = function() {
+  return BackendClient.getInstance().stopConnectivityPoll();
+};
+
+BackendClient.restartConnectivityPoll = function(intervalMs) {
+  return BackendClient.getInstance().restartConnectivityPoll(intervalMs);
 };
 
 BackendClient.startSession = function(vehicleInfo) {
