@@ -23,12 +23,22 @@ const defaults = require('../config/defaults');
 //         RDU format corrected: ={WEIGHT}= (no $ prefix for KELI).
 const SEED_VERSION = '2.3.0';
 
+// admin@codevertexafrica.com is TruConnect's recognized LOCAL platform-superuser
+// reference for this app's own users table (local operator login/PIN access) - it
+// mirrors the SAME email already seeded cross-service as truload-backend's
+// platform-owner superuser (Data/Seeders/UserManagement/UserSeeder.cs, CODEVERTEX
+// org). It is the only local account that should ever hold role='admin'; see the
+// guard in createUser() below, which enforces this for any account created after
+// seed time too (least privilege by default for every other locally-seeded user).
 const DEFAULT_ADMIN = {
   email: 'admin@codevertexafrica.com',
   password: 'Admin@123!',
   role: 'admin'
 };
 
+// Least-privilege local operator account. Any other tenant-scoped/demo/test user
+// seeded locally in future should follow this same pattern (role: 'operator' or
+// 'viewer'), never 'admin', per createUser()'s guard below.
 const TRUCONNECT_OPERATOR = {
   email: 'user@truconnect.com',
   password: 'User@1234',
@@ -405,23 +415,39 @@ async function seedAutoweighConfig(db, force = false) {
 
 /**
  * Create a new user
+ *
+ * Least-privilege guard: 'admin' role is reserved for DEFAULT_ADMIN.email
+ * (admin@codevertexafrica.com), TruConnect's one recognized local platform
+ * superuser. Any other email requesting 'admin' is downgraded to 'operator'
+ * so a future demo/test/tenant-scoped seed or UI flow can't silently grant
+ * broad access by default.
  */
 function createUser(email, password, role = 'operator') {
   const Database = require('./Database');
   const db = Database.getDb();
+
+  const normalizedEmail = String(email).toLowerCase();
+  let effectiveRole = role;
+  if (effectiveRole === 'admin' && normalizedEmail !== DEFAULT_ADMIN.email.toLowerCase()) {
+    console.warn(
+      `[Seed] Refusing to create local user '${email}' with role 'admin' - ` +
+      `only ${DEFAULT_ADMIN.email} may hold the local superuser role. Downgrading to 'operator'.`
+    );
+    effectiveRole = 'operator';
+  }
 
   const salt = bcrypt.genSaltSync(10);
   const passwordHash = bcrypt.hashSync(password, salt);
 
   const result = db.run(
     'INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)',
-    [email, passwordHash, role]
+    [email, passwordHash, effectiveRole]
   );
 
   return {
     id: result.lastInsertRowid,
     email,
-    role
+    role: effectiveRole
   };
 }
 
