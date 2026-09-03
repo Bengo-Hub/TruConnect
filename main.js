@@ -246,7 +246,11 @@ async function initializeApp() {
     // Initialize database (runs migrations)
     console.log('Initializing database...');
     Database.initialize();
-    console.log('Database initialized');
+    // Log the resolved path explicitly - it differs between a packaged/launched app (Electron
+    // userData dir) and running under plain Node (falls back to the repo root) - a support/
+    // troubleshooting dead end otherwise, since "delete the DB and let it recreate" silently does
+    // nothing if someone deletes the repo-root file while the running app actually uses userData.
+    console.log(`Database initialized at: ${Database.getInstance().options.dbPath}`);
 
     // Run seeds (idempotent)
     console.log('Running seeds...');

@@ -21,7 +21,21 @@ const defaults = require('../config/defaults');
 // v2.3.0: Indicator serial baud corrected to 9600 (indicators run at 9600, not 1200).
 //         ZM query changed to ENQ (0x05). RDU panels remain at 1200 baud.
 //         RDU format corrected: ={WEIGHT}= (no $ prefix for KELI).
-const SEED_VERSION = '2.3.0';
+// v2.3.1: Self-heal the admin_user seed for installs provisioned before the July 2026
+//         codevertexitsolutions.com -> codevertexafrica.com domain rebrand (commit
+//         4c4fb69) - those installs' admin row still has the old-domain email, which
+//         the "already applied" version gate below was silently preventing from ever
+//         being revisited (the gate only re-runs a seed when SEED_VERSION itself
+//         changes), so `admin@codevertexafrica.com` (the login page's own prepopulated
+//         default) never actually existed on any pre-rebrand install and always failed
+//         "Invalid email or password" no matter how many times the DB file was deleted,
+//         if a stale copy of it lived on outside the path actually deleted.
+const SEED_VERSION = '2.3.1';
+
+// Domain(s) admin_user has been seeded under historically - checked in order, most
+// recent first, purely to migrate a pre-existing row forward. Never used to seed a NEW
+// install (that always uses DEFAULT_ADMIN.email above).
+const LEGACY_ADMIN_EMAILS = ['admin@codevertexitsolutions.com'];
 
 // admin@codevertexafrica.com is TruConnect's recognized LOCAL platform-superuser
 // reference for this app's own users table (local operator login/PIN access) - it
@@ -186,6 +200,25 @@ async function seedAdminUser(db, force = false) {
   if (!force && isSeedApplied(db, seedName, SEED_VERSION)) {
     console.log('Admin user seed already applied, skipping...');
     return;
+  }
+
+  // Migrate a pre-rebrand admin row (old domain) forward to the current email, preserving its
+  // existing password hash untouched - a domain rename, not a password reset. Only runs when the
+  // current-domain row doesn't already exist, so it can never clobber a real, already-migrated
+  // account or create a duplicate.
+  const currentAdminExists = db.get('SELECT id FROM users WHERE email = ?', [DEFAULT_ADMIN.email]);
+  if (!currentAdminExists) {
+    for (const legacyEmail of LEGACY_ADMIN_EMAILS) {
+      const legacyAdmin = db.get('SELECT id FROM users WHERE email = ?', [legacyEmail]);
+      if (legacyAdmin) {
+        db.run(
+          'UPDATE users SET email = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [DEFAULT_ADMIN.email, DEFAULT_ADMIN.role, legacyAdmin.id]
+        );
+        console.log(`Admin user migrated from legacy email ${legacyEmail} to ${DEFAULT_ADMIN.email}.`);
+        break;
+      }
+    }
   }
 
   const existingAdmin = db.get('SELECT id FROM users WHERE email = ?', [DEFAULT_ADMIN.email]);
