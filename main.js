@@ -876,6 +876,20 @@ ipcMain.handle('get-settings', async () => {
 
 ipcMain.handle('save-settings', async (event, settings) => {
   try {
+    // Fail-closed guard, symmetric with BackendClient's runtime simulation guard: never allow
+    // simulation mode + backend integration to be saved together unless this device is
+    // explicitly marked as targeting the codevertex-demo tenant. Prevents an operator from
+    // configuring a state where simulated fake scale readings would be auto-submitted as real
+    // transactions to a live organization.
+    const simulationEnabled = settings.simulation?.enabled === true;
+    const backendEnabled = settings.backend?.enabled === true;
+    const isDemoTenant = settings.operationMode?.isDemoTenant === true;
+    if (simulationEnabled && backendEnabled && !isDemoTenant) {
+      const error = 'Cannot save: Simulation Mode + Backend Integration require Demo/Training Mode to be enabled (Backend tab) - simulated weighings must never be sent to a live organization.';
+      console.warn('[Settings] Rejected save:', error);
+      return { success: false, error };
+    }
+
     console.log('Saving settings:', settings);
 
     // Capture current state BEFORE importing (for comparison later)

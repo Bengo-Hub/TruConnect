@@ -1642,6 +1642,40 @@
                 </button>
               </div>
             </div>
+
+            <div class="form-section">
+              <h3 class="form-section-title"><i class="fas fa-graduation-cap"></i> Demo / Training Mode</h3>
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Lets a prospect practice/train on TruConnect using simulated weighings with zero risk of
+                fake data reaching a real organization. When enabled, this device is allowed to send
+                simulated weighings to the backend, and should target the shared codevertex-demo
+                tenant's DEMO-WB-01 station rather than a live weighbridge.
+              </p>
+              <div class="form-group">
+                <div class="toggle-wrapper">
+                  <div>
+                    <label>Demo / Training Mode</label>
+                    <small style="color: var(--text-secondary);">Required for simulated weighings to be sent to the backend - simulation + backend integration cannot be saved together without this</small>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="demo-tenant-enabled">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div style="margin-top: 15px;">
+                <button class="btn btn-secondary" id="btn-populate-demo" style="padding: 10px 20px;">
+                  <i class="fas fa-flask"></i>
+                  Populate Demo Values
+                </button>
+                <span id="demo-populate-result" style="margin-left: 12px; font-size: 0.9rem;"></span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 10px;">
+                Fills in the dedicated demo service account email and the DEMO-WB-01 station code below
+                (never repoints the live KURA-linked account) and turns Demo/Training Mode on. You still
+                need to enter the demo account's password and click Save.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -2138,6 +2172,43 @@
       }
     }
 
+    // ============ Demo / Training Mode ============
+    // operationMode.isDemoTenant - required (with simulation.enabled + backend.enabled) for
+    // BackendClient's simulation guard to let a simulated weighing actually send. See
+    // BackendClient._isSimulationSendBlocked and main.js's save-settings validation.
+
+    const demoTenantEnabled = document.getElementById('demo-tenant-enabled');
+
+    // Org targeting here is implicit: TruLoad backend resolves the organization from the
+    // authenticated service account's JWT, not from a URL/slug field, so "pointing at
+    // codevertex-demo" means logging in as a demo-scoped service account rather than
+    // changing backend-url. Never touches backend-url or the password field.
+    document.getElementById('btn-populate-demo')?.addEventListener('click', () => {
+      document.getElementById('backend-email').value = 'middleware-demo@truconnect.local';
+      document.getElementById('station-code').value = 'DEMO-WB-01';
+      if (!document.getElementById('station-name').value) {
+        document.getElementById('station-name').value = 'Demo Weighbridge Station 01';
+      }
+      demoTenantEnabled.checked = true;
+
+      const resultEl = document.getElementById('demo-populate-result');
+      resultEl.textContent = 'Demo values populated - enter the demo password and Save';
+      resultEl.style.color = 'var(--primary)';
+    });
+
+    // Get operationMode config from form
+    function getOperationModeConfig() {
+      return {
+        isDemoTenant: demoTenantEnabled.checked
+      };
+    }
+
+    // Populate operationMode config from settings
+    function populateOperationModeConfig(operationMode) {
+      if (!operationMode) return;
+      demoTenantEnabled.checked = operationMode.isDemoTenant === true;
+    }
+
     // ============ Offline Sync Queue Status ============
 
     async function refreshQueueStatus() {
@@ -2502,7 +2573,8 @@
         },
         rdu: getRduConfig(),
         backend: getBackendConfig(),
-        autoWeigh: getAutoweighConfig()
+        autoWeigh: getAutoweighConfig(),
+        operationMode: getOperationModeConfig()
       };
 
       console.log('Saving settings:', settings);
@@ -2549,6 +2621,9 @@
         document.getElementById('station-code').value = settings.station.code || '';
         document.getElementById('bidirectional').checked = settings.station.bidirectional || false;
       }
+
+      // Demo / Training Mode
+      populateOperationModeConfig(settings.operationMode);
 
       // Capture mode
       if (settings.app?.captureMode) {

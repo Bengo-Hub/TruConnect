@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const EventBus = require('../core/EventBus');
 const ConfigManager = require('../config/ConfigManager');
+const StateManager = require('../core/StateManager');
 
 class BackendClient {
   static instance = null;
@@ -280,6 +281,31 @@ class BackendClient {
   }
 
   /**
+   * Hard guard: block a real network send when SimulationEngine is active and this device is
+   * not explicitly marked as targeting the codevertex-demo tenant (operationMode.isDemoTenant).
+   * Closes a real gap: today simulated fake scale readings had no guard preventing them from
+   * being auto-submitted as real transactions to a live organization. Emits
+   * 'backend:blocked-simulated-data' so the UI/logs can surface it. Real (non-simulated)
+   * weighings are never affected - this only trips when StateManager.isSimulation() is true.
+   *
+   * @param {string} callName - 'sendAutoweigh' | 'completeSession', for logging/eventing only
+   * @returns {boolean} true if the caller must no-op (return null) instead of sending
+   */
+  _isSimulationSendBlocked(callName) {
+    if (!StateManager.isSimulation()) return false;
+
+    const isDemoTenant = ConfigManager.get('operationMode.isDemoTenant', false) === true;
+    if (isDemoTenant) return false;
+
+    console.warn(`[BackendClient] Blocked ${callName}: simulation is active and operationMode.isDemoTenant is not true`);
+    this.eventBus.emitEvent('backend:blocked-simulated-data', {
+      call: callName,
+      reason: 'simulation-active-without-demo-tenant'
+    });
+    return true;
+  }
+
+  /**
    * Send auto-weigh data to backend when all axles are captured
    * Creates preliminary record with CaptureStatus: "auto"
    *
@@ -287,6 +313,10 @@ class BackendClient {
    * @returns {Object} - Backend response or null if offline
    */
   async sendAutoweigh(weighingData) {
+    if (this._isSimulationSendBlocked('sendAutoweigh')) {
+      return null;
+    }
+
     if (!this.config.enabled || !this.config.baseUrl || !this.config.stationId) {
       console.log('[BackendClient] Backend not configured - skipping autoweigh submission');
       return null;
@@ -359,6 +389,10 @@ class BackendClient {
    * @returns {Object} - Backend response or null if offline
    */
   async completeSession(finalData) {
+    if (this._isSimulationSendBlocked('completeSession')) {
+      return null;
+    }
+
     if (!this.config.enabled || !this.config.baseUrl || !this.config.stationId) {
       console.log('[BackendClient] Backend not configured - skipping session completion');
       return null;

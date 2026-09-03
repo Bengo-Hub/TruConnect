@@ -508,6 +508,13 @@ module.exports = {
     mode: 'local',                           // 'local' | 'live' - Current operation mode
     // Local mode: TruConnect serves weights via local WebSocket/API only
     // Live mode: TruConnect also relays to backend WebSocket and syncs with cloud
+    isDemoTenant: false,                     // When true, this device is intentionally targeting the
+                                              // shared platform-wide codevertex-demo tenant (TRULOAD-DEMO
+                                              // org / DEMO-WB-01 station) for practice/training weighings.
+                                              // Required (together with simulation.enabled + backend.enabled)
+                                              // for BackendClient's simulation guard to allow a simulated
+                                              // weighing to actually be sent - see BackendClient.js and
+                                              // main.js's save-settings handler.
     autoSwitchToLive: false,                 // Auto-switch to live when backend available
     syncToBackendInLive: true,               // In live mode, sync all weight data to backend WS
     primaryWsInLive: 'backend',              // In live mode, which WS is primary: 'local' | 'backend'
