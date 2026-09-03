@@ -1672,8 +1672,10 @@
               </div>
               <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 10px;">
                 Fills in the dedicated demo service account email and the DEMO-WB-01 station code below
-                (never repoints the live KURA-linked account) and turns Demo/Training Mode on. You still
-                need to enter the demo account's password and click Save.
+                (never repoints the live KURA-linked account), turns Demo/Training Mode on, and tries to
+                confirm the station's real display name from the backend (never guessed locally). You
+                still need to enter the demo account's password and click Save - then use "Sync Now"
+                above if the name wasn't confirmed automatically.
               </p>
             </div>
           </div>
@@ -2183,17 +2185,51 @@
     // authenticated service account's JWT, not from a URL/slug field, so "pointing at
     // codevertex-demo" means logging in as a demo-scoped service account rather than
     // changing backend-url. Never touches backend-url or the password field.
-    document.getElementById('btn-populate-demo')?.addEventListener('click', () => {
+    //
+    // 'DEMO-WB-01' (the code) and 'middleware-demo@truconnect.local' are the fixed
+    // integration contract with truload-backend (Data/Seeders/UserManagement/
+    // UserSeeder.cs + UserManagementSeeder.cs) - there's no API to "look up the demo
+    // service account", so those stay as known constants. The station's DISPLAY NAME
+    // is different: it's descriptive data that lives in and can change on the backend,
+    // so rather than hardcoding a guessed label here (which could silently drift from
+    // whatever truload-backend actually calls the station), we resolve it dynamically
+    // through the existing ConfigSyncService (Phase 4) Stations-fetch below - reusing
+    // its 'config-sync:run' IPC handler rather than a second HTTP client.
+    document.getElementById('btn-populate-demo')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-populate-demo');
+      const resultEl = document.getElementById('demo-populate-result');
+
       document.getElementById('backend-email').value = 'middleware-demo@truconnect.local';
       document.getElementById('station-code').value = 'DEMO-WB-01';
-      if (!document.getElementById('station-name').value) {
-        document.getElementById('station-name').value = 'Demo Weighbridge Station 01';
-      }
       demoTenantEnabled.checked = true;
 
-      const resultEl = document.getElementById('demo-populate-result');
-      resultEl.textContent = 'Demo values populated - enter the demo password and Save';
+      btn.disabled = true;
+      resultEl.textContent = 'Demo values populated - confirming station name with backend...';
       resultEl.style.color = 'var(--primary)';
+
+      // Best-effort: this only succeeds if the currently-saved backend credentials
+      // already ARE the demo account (e.g. re-populating on a device already set up
+      // for demo mode). On first-time setup the demo password hasn't been entered/
+      // saved yet, so this sync authenticates as whatever account is currently
+      // configured and won't find 'DEMO-WB-01' - that's expected, not an error, and
+      // the user is guided to confirm the name via "Sync Now" after Save instead of
+      // TruConnect fabricating one.
+      try {
+        const syncResult = await api.invoke('config-sync:run');
+        const backendStation = syncResult?.drift?.backendStation;
+        if (syncResult?.success && backendStation?.code === 'DEMO-WB-01' && backendStation.name) {
+          document.getElementById('station-name').value = backendStation.name;
+          resultEl.textContent = `Confirmed from backend: "${backendStation.name}". Enter the demo password and Save.`;
+          resultEl.style.color = 'var(--success)';
+        } else {
+          resultEl.textContent = 'Demo values populated - enter the demo password, click Save, then use "Sync Now" above to confirm the real station name from the backend.';
+        }
+      } catch (error) {
+        resultEl.textContent = 'Demo values populated - enter the demo password, click Save, then use "Sync Now" above to confirm the real station name from the backend.';
+      }
+
+      btn.disabled = false;
+      refreshConfigSyncStatus();
     });
 
     // Get operationMode config from form
