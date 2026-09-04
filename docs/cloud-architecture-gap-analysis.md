@@ -43,7 +43,15 @@ Production URLs:
 
 ### Gap 2: Auto-Weigh Backend Integration Missing
 
-**Problem**: TruConnect has no configuration for posting weight data directly to the cloud backend (auto-weigh mode).
+**Status (2026-09-04): CLOSED.** TruConnect posts weight data directly to the cloud backend
+today, exactly what this gap called for. `BackendClient.js` (`sendAutoweigh`/`completeSession`)
+posts to `POST /api/v1/weighing-transactions/autoweigh` with `ClientLocalId`-based idempotency,
+and every call is durably queued in SQLite before the network attempt so a submission is never
+lost if the backend is unreachable at capture time (see the "TruConnect SQLite offline queue"
+note under Gap 4, and `docs/AUTO_WEIGH_FLOW.md`'s "Offline Support" section for the full
+mechanism). Original problem statement kept below for history.
+
+**Original problem**: TruConnect has no configuration for posting weight data directly to the cloud backend (auto-weigh mode).
 
 **Legacy Pattern (iConnect → KenloadV2)**:
 ```javascript
@@ -62,7 +70,13 @@ axios.post(server + ':' + serverport + '/api/AutoWeigh', autoWeighPayload);
 
 ### Gap 4: PWA Offline Mode Architecture Unclear
 
-**Problem**: FRD mentions PWA with offline capability, but:
+**Status (2026-09-04): CLOSED for the frontend-less TruConnect deployment shape.** Point 2 below
+("syncing offline weights to cloud backend is not implemented") is no longer true for that shape -
+see the "TruConnect SQLite offline queue vs. browser/PWA offline mode" note further down, right
+before the PWA solution architecture, for which path applies to which deployment. Original
+problem statement kept below for history.
+
+**Original problem**: FRD mentions PWA with offline capability, but:
 1. Offline weighing requires local middleware connection
 2. Syncing offline weights to cloud backend is not implemented
 3. Service worker configuration for middleware interaction missing
@@ -326,6 +340,23 @@ NEXT_PUBLIC_MIDDLEWARE_MODE=backend_relay
 
 ## PWA Offline Mode - Critical Architecture Insight
 
+> **Note (2026-09-04) - TruConnect SQLite offline queue vs. browser/PWA offline mode.** The
+> design in this section (IndexedDB + Background Sync in the browser) is real and shipped, but as
+> a separate, earlier initiative (2026-06) covering the case where an operator uses
+> `truload-frontend` directly in a browser at a connected site - offline capture there lives in
+> the browser's own storage and syncs via the Background Sync API.
+>
+> It does not apply to a frontend-less TruConnect deployment - a remote quarry or waste-site
+> install with no browser in the loop, which is what an offline site actually runs. That shape is
+> solved by a completely different implementation built in a later (2026-09) initiative: a
+> durable SQLite queue inside TruConnect itself (`weighing_queue` table, driven by
+> `src/backend/SyncQueue.js` and `src/backend/BackendClient.js`). See `docs/AUTO_WEIGH_FLOW.md`'s
+> "Offline Support" section for that mechanism, and `docs/architecture.md`'s "Database Schema"
+> section for the table itself.
+>
+> The two are complementary, not competing - which one applies depends on whether a browser
+> frontend is actually present and reachable at the site.
+
 ### The Key Realization
 
 **When a PWA is installed and running offline:**
@@ -583,3 +614,4 @@ function useNetworkState() {
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-29 | Claude | Initial gap analysis |
+| 1.1 | 2026-09-04 | Claude | Gap 2 and Gap 4 point 2 marked closed (TruConnect's SQLite `SyncQueue`/`BackendClient` now post weight data to the cloud backend with durable offline retry); added a note distinguishing that path from this document's browser/PWA IndexedDB design, which shipped separately for the connected-frontend deployment shape |

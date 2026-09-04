@@ -380,37 +380,85 @@ const confirmWeights = async (weighingId, axles) => {
 
 ## Offline Support
 
-### Queuing Mechanism
+TruConnect's weighing capture is offline-first. Every backend call for a weighing (`autoweigh`
+and `complete`) is written to a durable SQLite queue BEFORE any network attempt. A weighing
+captured while a site has no connectivity is never lost, even across an app restart or a machine
+reboot - it sits in the queue as `pending` until it can sync.
 
-When backend is unavailable:
+### The queue table
 
-```javascript
-// BackendClient queues failed requests
-_queueForSync(type, payload) {
-  this.syncQueue.push({
-    type,
-    payload,
-    timestamp: Date.now(),
-    retryCount: 0
-  });
-  EventBus.emit('backend:queued-for-sync', { type, payload });
-}
+`weighing_queue` (`src/database/Database.js`, migration `014_create_weighing_queue`) holds one
+row per queued network call:
 
-// Process queue when connection restored
-async _processQueue() {
-  while (this.syncQueue.length > 0) {
-    const item = this.syncQueue.shift();
-    try {
-      await this._sendToBackend(item.type, item.payload);
-    } catch {
-      item.retryCount++;
-      if (item.retryCount < 3) {
-        this.syncQueue.unshift(item);
-      }
-    }
-  }
-}
-```
+| Column | Purpose |
+|---|---|
+| `local_session_id` | Groups the `autoweigh` + `complete` pair for one physical weighing |
+| `client_local_id` | A fresh UUID per row - sent as the backend's `ClientLocalId` idempotency key |
+| `request_type` | `autoweigh` or `complete` |
+| `status` | `pending` -> `sending` -> `synced`, or `dead_letter` on a non-retryable failure |
+| `attempts` / `max_attempts` | Retry counter, capped at 10 attempts by default |
+| `next_attempt_at` | When backoff allows the next send attempt |
+| `backend_transaction_id` | The backend's `WeighingId`, filled in once the row is `synced` |
+
+`BackendClient.sendAutoweigh()` and `completeSession()` (`src/backend/BackendClient.js`) both
+call `_queueForSync()`, which delegates straight to `SyncQueue.enqueue()`
+(`src/backend/SyncQueue.js`). The write to SQLite happens first; only then does
+`SyncQueue.attempt()` try the network call. If that immediate attempt fails, the row stays
+`pending` and the queue's own retry machinery takes over - the caller never has to handle the
+failure itself.
+
+### Two calls, two distinct idempotency keys
+
+Each physical weighing produces two queue rows: an `autoweigh` row (sent as soon as all axles are
+captured) and a `complete` row (sent when the operator confirms). They share a
+`local_session_id`, generated once in `BackendClient.startSession()` and stable across an app
+restart between the two calls, purely to group them - but each gets its own `client_local_id`,
+never reused between the pair. Reusing one id across both calls would make the second call land
+on the backend's idempotent-return path and hand back the first call's result instead of actually
+completing the transaction, stranding the weighing at `CaptureStatus="auto"` forever.
+
+### Dependency chaining
+
+A `complete` row cannot send before its sibling `autoweigh` row has synced. `SyncQueue.attempt()`
+checks this on every attempt (`_findAutoweighRow`): if the sibling isn't `synced` yet, the
+`complete` row is left untouched - this is not counted as a failed attempt, so it doesn't consume
+a retry or advance the row's backoff schedule. Once the `autoweigh` row syncs, its
+`backend_transaction_id` is patched into the `complete` row's payload as `weighingTransactionId`
+(`_patchWeighingTransactionId`), so the backend can match the completion to the record it already
+created.
+
+### Backoff and dead-lettering
+
+Retry backoff is ported verbatim from `CloudConnectionManager._scheduleReconnect`, not a new
+formula: `delay = min(5000ms * 1.5^(attempts-1), 30000ms)`. A row that fails past `max_attempts`
+(10 by default) moves to `dead_letter` and stops retrying automatically; an operator can requeue
+every dead-lettered row for another attempt via `SyncQueue.retryDeadLetters()`.
+
+Failures are classified by HTTP status:
+- `401` - the cached token is cleared and the row is retried (a token can be rejected
+  server-side even before its recorded expiry)
+- `429` or `5xx` - transient, retried with backoff
+- Any other `4xx` - treated as a permanent client error (bad payload, validation failure) and
+  dead-lettered immediately rather than retried forever
+
+### Draining the queue
+
+`SyncQueue.drain()` processes all due `pending` rows in creation order, which naturally sends an
+`autoweigh` row before its `complete` sibling since the sibling is always enqueued later. It runs:
+- On a periodic timer (`startPeriodicDrain`, every 20s by default)
+- Immediately when `BackendClient`'s connectivity poll (`startConnectivityPoll`, every 30s by
+  default) detects the backend has come back online (the `backend:online` edge event)
+
+### What this replaces
+
+Earlier versions of this document described an in-memory `syncQueue` array kept on
+`BackendClient` (`this.syncQueue.push(...)`), lost on any app restart. That code no longer
+exists - it was replaced entirely by the durable SQLite queue described above, built as part of
+the TruConnect offline-capability initiative (`TruConnect` commits `1270b61`/`1fa49ff`). Anyone
+still going by the old description would wrongly conclude an offline weighing is lost if the app
+restarts before reconnecting; the opposite is true - the queue row survives on disk independent of
+the app process, and durability across a real two-process restart is covered by a regression test
+(`tests/sync-queue-and-config-sync-test.js`, section (e)).
 
 ### Idempotency
 
@@ -509,6 +557,8 @@ Check browser console for frontend WebSocket events.
 |-----------|------|---------|
 | Middleware | `src/output/WebSocketOutput.js` | WebSocket server, event handling |
 | Middleware | `src/backend/BackendClient.js` | Backend API communication |
+| Middleware | `src/backend/SyncQueue.js` | Durable offline sync queue (see "Offline Support" above) |
+| Middleware | `src/backend/ConfigSyncService.js` | Station/AxleConfiguration mirror + drift detection |
 | Middleware | `src/cloud/CloudConnectionManager.js` | Cloud relay management |
 | Middleware | `src/core/StateManager.js` | Weight state management |
 | Backend | `Controllers/WeighingController.cs` | Auto-weigh API endpoint |

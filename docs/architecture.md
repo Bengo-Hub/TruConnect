@@ -151,6 +151,11 @@ TruConnect/
 │   │   ├── AuthManager.js          # Authentication management
 │   │   └── AuthMiddleware.js       # Express middleware
 │   │
+│   ├── backend/
+│   │   ├── BackendClient.js        # truload-backend REST API communication (autoweigh/complete)
+│   │   ├── SyncQueue.js            # Durable SQLite offline sync queue (see AUTO_WEIGH_FLOW.md)
+│   │   └── ConfigSyncService.js    # Station/AxleConfiguration mirror + drift detection
+│   │
 │   ├── database/
 │   │   ├── Database.js             # SQLite connection manager
 │   │   ├── Migrations.js           # Schema migrations
@@ -492,7 +497,67 @@ CREATE TABLE auth_tokens (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- Weighing Queue: durable offline sync queue for backend weighing calls.
+-- Written BEFORE any network attempt, so a captured weighing survives an app
+-- restart or an extended offline period. See AUTO_WEIGH_FLOW.md's "Offline
+-- Support" section for the full mechanism.
+CREATE TABLE weighing_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  local_session_id TEXT NOT NULL,
+  client_local_id TEXT UNIQUE NOT NULL,
+  request_type TEXT NOT NULL CHECK(request_type IN ('autoweigh', 'complete')),
+  endpoint TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'sending', 'dead_letter', 'synced')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 10,
+  next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_error TEXT,
+  backend_transaction_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Backend Stations: read-only mirror of truload-backend's Station catalog,
+-- populated by ConfigSyncService.js. Used to resolve a locally-typed
+-- station.code to the backend's station GUID.
+CREATE TABLE backend_stations (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  station_type TEXT,
+  organization_id TEXT,
+  organization_name TEXT,
+  supports_bidirectional INTEGER NOT NULL DEFAULT 0,
+  bound_a_code TEXT,
+  bound_b_code TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  raw_json TEXT NOT NULL,
+  synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Backend Axle Configurations: read-only mirror of truload-backend's
+-- AxleConfiguration catalog, populated by ConfigSyncService.js.
+CREATE TABLE backend_axle_configurations (
+  id TEXT PRIMARY KEY,
+  axle_code TEXT NOT NULL,
+  axle_name TEXT,
+  axle_number INTEGER NOT NULL DEFAULT 0,
+  gvw_permissible_kg INTEGER NOT NULL DEFAULT 0,
+  is_standard INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  raw_json TEXT NOT NULL,
+  synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
+
+`backend_stations` and `backend_axle_configurations` are a mapping layer only. They are populated
+by `ConfigSyncService.js` on-demand, every 6h, and on backend reconnect, but they never overwrite
+the operator-typed `stations`/`station_bounds` tables above. When a station's backend values
+differ from what an operator typed locally, `ConfigSyncService` surfaces the drift as an event and
+a Settings banner rather than auto-applying it - an operator has to apply it explicitly via
+`applyBackendValues()`.
 
 ---
 
