@@ -356,6 +356,23 @@ NEXT_PUBLIC_MIDDLEWARE_MODE=backend_relay
 >
 > The two are complementary, not competing - which one applies depends on whether a browser
 > frontend is actually present and reachable at the site.
+>
+> **Follow-up (2026-09-11).** The TruConnect-side queue used to be transport-only, unlike the
+> browser/PWA mechanism above. Until this pass, `weighing_queue` durably queued a capture but
+> computed no local decision at all, so an operator at a genuinely offline frontend-less site
+> got zero overload feedback until the row eventually synced, unlike the browser mechanism's
+> own `offlineCapture.ts`/`compliance.ts` engine. TruConnect now has the equivalent:
+> `src/backend/ComplianceEngine.js`, a hand-port of the same frontend engine, computes a
+> provisional GVW and per-axle-group decision entirely from the locally mirrored axle config,
+> weight reference, and tolerance data, persisted into a new `local_weighings` table (one row
+> per physical weighing, distinct from `weighing_queue`'s per-network-call rows) and rendered on
+> the capture screen labelled "Provisional." A second, previously undocumented gap is also
+> closed. **The Mobile Scale View and Multideck View screens themselves had no way to originate
+> a complete weighing at all**: no plate field, no axle-configuration picker, and, for
+> Multideck, no capture action whatsoever, online or offline. Both screens now have a "Weighing
+> Setup" card (plate, axle-config picker, Enforcement/Commercial mode) and a working
+> capture-to-complete flow. See `docs/AUTO_WEIGH_FLOW.md`'s "Local provisional compliance"
+> section for the engine detail.
 
 ### The Key Realization
 

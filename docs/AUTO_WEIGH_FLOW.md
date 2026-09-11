@@ -514,6 +514,45 @@ public async Task<ComplianceResult> CalculateComplianceAsync(WeighingTransaction
 }
 ```
 
+### Local provisional compliance (offline-weighing redesign, 2026-09)
+
+Everything above is what the *backend* computes once a capture actually reaches it. Until
+this initiative, that was TruConnect's only source of a decision. A weighing captured while
+the backend was unreachable produced zero feedback (no overload result, no ticket) until the
+queued row eventually synced. That gap is now closed for enforcement mode.
+`src/backend/ComplianceEngine.js` is a hand-port of `truload-frontend`'s own offline engine
+(`src/lib/offline/compliance.ts`, validated 30/30 against real weighings), computing the same
+GVW and per-axle-group overload decision entirely from the LOCAL mirror
+(`backend_axle_configurations`, `backend_axle_weight_references`, `backend_tolerance_settings`,
+all synced by `ConfigSyncService`) with no network call. `BackendClient.sendAutoweigh()` and
+`completeSession()` compute this and persist it, alongside the raw reading, into a new
+`local_weighings` table: one row per PHYSICAL weighing, distinct from `weighing_queue`'s
+one-row-per-network-call shape, written before either method ever checks whether the backend
+is reachable. The capture UI (`pages/index.html`) renders this result immediately, labelled
+"Provisional" (and "Provisional, offline" specifically when the row hasn't synced yet). The
+backend's own `CalculateComplianceAsync` above remains authoritative once the weighing
+actually syncs.
+
+Commercial mode gets a much narrower local computation. `ComplianceEngine.
+computeCommercialCaptureResult` resolves tare, gross, and net weight from two captured
+readings, mirroring `CommercialWeighingService.cs`'s own capture arithmetic, but deliberately
+never determines `ToleranceExceeded` locally, since that depends on org+cargo-scoped
+`CommercialToleranceSettings` rows TruConnect does not mirror. More importantly, a commercial
+capture on TruConnect is **local-only**: it is never posted to the network at all, because the
+real commercial billing path is `CommercialWeighingController`'s own transaction-scoped
+endpoints, a pre-existing `TransporterId`/`CargoId`-bearing transaction, not an `axles[]`
+array, and not this document's `/autoweigh` endpoint. TruConnect's commercial capture exists
+purely as an operator-facing local preview (net weight, nothing else); the real transaction
+still has to be completed through the commercial weighing screen once online.
+
+A previously dead-end gap is also closed by the same initiative. `sendAutoweigh()` and
+`completeSession()` used to return early, skipping `_queueForSync` entirely so nothing was
+ever written anywhere, whenever `stationId` hadn't resolved to a backend GUID yet: a genuine
+silent-drop bug on any install that hadn't synced Stations at least once. Both methods now
+always write the `local_weighings` row first; only the network-queue step is skipped when the
+station is unresolved, and the row is flagged `awaiting_station_resolution` rather than never
+existing.
+
 ---
 
 ## Troubleshooting
@@ -558,7 +597,9 @@ Check browser console for frontend WebSocket events.
 | Middleware | `src/output/WebSocketOutput.js` | WebSocket server, event handling |
 | Middleware | `src/backend/BackendClient.js` | Backend API communication |
 | Middleware | `src/backend/SyncQueue.js` | Durable offline sync queue (see "Offline Support" above) |
-| Middleware | `src/backend/ConfigSyncService.js` | Station/AxleConfiguration mirror + drift detection |
+| Middleware | `src/backend/ConfigSyncService.js` | Station/AxleConfiguration/AxleWeightReference/ToleranceSetting mirror + drift detection |
+| Middleware | `src/backend/ComplianceEngine.js` | Local provisional compliance (enforcement) and tare/gross/net (commercial); see "Local provisional compliance" above |
+| Middleware | `src/backend/LocalWeighingStore.js` | One row per physical weighing (`local_weighings`), UI-queryable, distinct from `weighing_queue`'s per-network-call rows |
 | Middleware | `src/cloud/CloudConnectionManager.js` | Cloud relay management |
 | Middleware | `src/core/StateManager.js` | Weight state management |
 | Backend | `Controllers/WeighingController.cs` | Auto-weigh API endpoint |
