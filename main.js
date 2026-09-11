@@ -1289,6 +1289,7 @@ ipcMain.handle('mobile:capture-axle', async (event, data) => {
     console.log(`Axle captured: ${weight}kg (Axle ${axleResult.axleNumber}/${axleConfig.expectedAxles || '?'}, GVW: ${axleResult.gvw}kg, Remaining: ${remainingAxles})`);
 
     // Send auto-weigh to backend when all axles are captured
+    let localWeighing = null;
     if (isComplete && !BackendClient.isAutoweighSent()) {
       console.log('[AutoWeigh] All axles captured - sending auto-weigh to backend...');
 
@@ -1312,6 +1313,16 @@ ipcMain.handle('mobile:capture-axle', async (event, data) => {
           });
         }
       }
+
+      // Surface whatever got persisted locally (provisional or otherwise) regardless
+      // of whether the live network call itself succeeded - the capture UI needs this
+      // to show a result either way (offline-weighing redesign, 2026-09).
+      try {
+        const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+        localWeighing = LocalWeighingStore.get(BackendClient.getSession().localSessionId);
+      } catch (err) {
+        console.warn('Could not load local weighing record:', err.message);
+      }
     }
 
     return {
@@ -1320,7 +1331,8 @@ ipcMain.handle('mobile:capture-axle', async (event, data) => {
       isComplete,
       remainingAxles,
       expectedAxles: axleConfig.expectedAxles,
-      autoweighSent: isComplete && BackendClient.isAutoweighSent()
+      autoweighSent: isComplete && BackendClient.isAutoweighSent(),
+      localWeighing
     };
   } catch (error) {
     console.error('Error capturing axle:', error);
@@ -1409,6 +1421,11 @@ ipcMain.handle('mobile:vehicle-complete', async (event, data) => {
       completedAt: new Date().toISOString()
     };
 
+    // Capture the local_id BEFORE completeSession() runs - it always resets the
+    // session (even on a local-only/offline outcome), so this is the last point the
+    // record's own id is still reachable (offline-weighing redesign, 2026-09).
+    const localId = BackendClient.getSession().localSessionId;
+
     // Send final capture to backend (updates existing auto-weigh record)
     console.log('[WeighingComplete] Sending final capture to backend...');
     const backendResult = await BackendClient.completeSession({
@@ -1436,6 +1453,14 @@ ipcMain.handle('mobile:vehicle-complete', async (event, data) => {
       }
     }
 
+    let localWeighing = null;
+    try {
+      const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+      localWeighing = localId ? LocalWeighingStore.get(localId) : null;
+    } catch (err) {
+      console.warn('Could not load local weighing record:', err.message);
+    }
+
     EventBus.emit('vehicle:complete', vehicleData);
     console.log(`Vehicle complete: ${mobileState.totalAxles} axles, GVW: ${mobileState.gvw}kg`);
 
@@ -1445,7 +1470,7 @@ ipcMain.handle('mobile:vehicle-complete', async (event, data) => {
     sm.currentMobileWeight = 0;
     sm.mobileWeightStable = true;
 
-    return { success: true, ...vehicleData };
+    return { success: true, ...vehicleData, localWeighing };
   } catch (error) {
     console.error('Error completing vehicle:', error);
     return { success: false, error: error.message };

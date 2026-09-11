@@ -919,6 +919,261 @@
         display: block;
       }
     }
+
+    /* ===== Offline capture UI (offline-weighing redesign, 2026-09) ===== */
+
+    .cloud-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: default;
+    }
+    .cloud-badge.online {
+      background: rgba(76, 175, 80, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(76, 175, 80, 0.3);
+    }
+    .cloud-badge.offline {
+      background: rgba(244, 67, 54, 0.1);
+      color: var(--danger);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+    }
+    .cloud-badge.unknown {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .pending-sync-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: rgba(255, 193, 7, 0.1);
+      color: var(--warning);
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      cursor: pointer;
+    }
+    .pending-sync-badge.visible {
+      display: flex;
+    }
+
+    .setup-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .setup-card h3 {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 15px;
+      color: var(--text);
+    }
+    .setup-mode-toggle {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .setup-mode-toggle button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .setup-mode-toggle button.active {
+      background: rgba(212, 175, 55, 0.12);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .setup-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+    .setup-field label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .setup-field input[type="text"],
+    .setup-field select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .setup-field input[type="text"]:focus,
+    .setup-field select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .setup-field.hidden {
+      display: none;
+    }
+
+    .resume-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      color: var(--primary);
+      font-size: 0.85rem;
+      margin-bottom: 15px;
+    }
+    .resume-banner.visible {
+      display: flex;
+    }
+    .resume-banner button {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .weighing-locked-note {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.82rem;
+      margin-bottom: 15px;
+    }
+    .weighing-locked-note.visible {
+      display: flex;
+    }
+
+    .result-panel {
+      display: none;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+    .result-panel.visible {
+      display: block;
+    }
+    .result-panel.status-legal { background: rgba(76, 175, 80, 0.08); border-color: rgba(76, 175, 80, 0.3); }
+    .result-panel.status-warning { background: rgba(255, 193, 7, 0.08); border-color: rgba(255, 193, 7, 0.3); }
+    .result-panel.status-overload { background: rgba(244, 67, 54, 0.08); border-color: rgba(244, 67, 54, 0.3); }
+    .result-panel.status-pending { background: rgba(255, 255, 255, 0.03); border-color: var(--border); }
+    .result-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .result-panel-status {
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.03em;
+    }
+    .status-legal .result-panel-status { color: var(--success); }
+    .status-warning .result-panel-status { color: var(--warning); }
+    .status-overload .result-panel-status { color: var(--danger); }
+    .status-pending .result-panel-status { color: var(--text-secondary); }
+    .result-panel-provisional-tag {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .result-groups-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-top: 10px;
+    }
+    .result-groups-table th, .result-groups-table td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+    .result-groups-table th {
+      color: var(--text);
+      font-weight: 500;
+    }
+    .result-groups-table tr.overload td { color: var(--danger); }
+    .result-groups-table tr.warning td { color: var(--warning); }
+
+    .multideck-actions {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .pending-panel {
+      display: none;
+      position: absolute;
+      top: 60px;
+      right: 20px;
+      width: 340px;
+      max-height: 400px;
+      overflow-y: auto;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px;
+      z-index: 200;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .pending-panel.visible {
+      display: block;
+    }
+    .pending-panel h4 {
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .pending-item {
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      margin-bottom: 8px;
+      font-size: 0.8rem;
+    }
+    .pending-item-plate {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .pending-item-meta {
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+    .pending-empty {
+      color: var(--text-secondary);
+      font-size: 0.82rem;
+      text-align: center;
+      padding: 15px 0;
+    }
   </style>
 </head>
 <body>
@@ -1016,6 +1271,14 @@
       </div>
 
       <div class="topbar-right">
+        <div class="cloud-badge unknown" id="cloud-badge" title="Cloud backend reachability">
+          <i class="fas fa-cloud"></i>
+          <span id="cloud-badge-text">Cloud: checking...</span>
+        </div>
+        <div class="pending-sync-badge" id="pending-sync-badge" title="Captures waiting to sync">
+          <i class="fas fa-clock"></i>
+          <span id="pending-sync-count">0</span> pending
+        </div>
         <div class="connection-bubble">
           <span class="status-dot connecting" id="status-dot"></span>
           <span class="status-text" id="status-text">Connecting...</span>
@@ -1029,6 +1292,12 @@
         </button>
       </div>
     </header>
+
+    <!-- Pending Sync Panel (offline-weighing redesign) -->
+    <div class="pending-panel" id="pending-panel">
+      <h4><i class="fas fa-clock"></i> Pending Local Captures</h4>
+      <div id="pending-panel-list"></div>
+    </div>
 
     <!-- Update Banner -->
     <div id="update-banner" role="alert">
@@ -1093,6 +1362,57 @@
 
       <!-- Multideck View -->
       <div class="view-container" id="multideck-view">
+        <!-- Weighing Setup (offline-weighing redesign, 2026-09) -->
+        <div class="setup-card" id="multideck-setup-card">
+          <h3><i class="fas fa-truck"></i> Weighing Setup</h3>
+          <div class="setup-mode-toggle">
+            <button type="button" class="mode-btn active" data-mode="enforcement" id="multideck-mode-enforcement">Enforcement</button>
+            <button type="button" class="mode-btn" data-mode="commercial" id="multideck-mode-commercial">Commercial</button>
+          </div>
+          <div class="setup-grid">
+            <div class="setup-field">
+              <label>Vehicle Registration</label>
+              <input type="text" id="multideck-plate-input" placeholder="e.g. KAA 123X" autocomplete="off">
+            </div>
+            <div class="setup-field" id="multideck-axle-config-field">
+              <label>Axle Configuration</label>
+              <select id="multideck-axle-config-select">
+                <option value="">Select axle configuration...</option>
+              </select>
+            </div>
+            <div class="setup-field hidden" id="multideck-weighing-type-field">
+              <label>This Reading Is</label>
+              <select id="multideck-weighing-type-select">
+                <option value="gross">Gross (loaded)</option>
+                <option value="tare">Tare (empty)</option>
+              </select>
+            </div>
+          </div>
+          <div class="resume-banner" id="multideck-resume-banner">
+            <span id="multideck-resume-text"></span>
+            <div>
+              <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" id="multideck-resume-btn">Resume</button>
+              <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" id="multideck-resume-dismiss-btn">New Instead</button>
+            </div>
+          </div>
+          <div class="weighing-locked-note" id="multideck-locked-note">
+            <i class="fas fa-lock"></i>
+            <span id="multideck-locked-text"></span>
+            <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="multideck-change-vehicle-btn">Change Vehicle</button>
+          </div>
+          <button type="button" class="btn btn-primary" style="width:100%;" id="multideck-start-weighing-btn">
+            <i class="fas fa-play"></i> Start Weighing
+          </button>
+        </div>
+
+        <div class="result-panel status-pending" id="multideck-result-panel">
+          <div class="result-panel-header">
+            <span class="result-panel-status" id="multideck-result-status">-</span>
+            <span class="result-panel-provisional-tag" id="multideck-result-tag">Provisional</span>
+          </div>
+          <div id="multideck-result-body"></div>
+        </div>
+
         <div class="deck-grid">
           <div class="deck-card" id="deck1-card">
             <div class="deck-header">
@@ -1162,10 +1482,77 @@
             </div>
           </div>
         </div>
+
+        <!-- Multideck capture actions (offline-weighing redesign, 2026-09) -->
+        <div class="multideck-actions" id="multideck-actions" style="display: none;">
+          <button class="btn btn-primary" id="btn-multideck-capture" disabled>
+            <i class="fas fa-check-circle"></i>
+            Capture Reading
+          </button>
+          <button class="btn btn-primary" id="btn-multideck-complete" disabled>
+            <i class="fas fa-flag-checkered"></i>
+            Complete Weighing
+          </button>
+          <button class="btn btn-danger" id="btn-multideck-cancel">
+            <i class="fas fa-times"></i>
+            Cancel
+          </button>
+        </div>
       </div>
 
       <!-- Mobile Scale View -->
       <div class="view-container active" id="mobile-view">
+        <!-- Weighing Setup (offline-weighing redesign, 2026-09) -->
+        <div class="setup-card" id="mobile-setup-card">
+          <h3><i class="fas fa-truck"></i> Weighing Setup</h3>
+          <div class="setup-mode-toggle">
+            <button type="button" class="mode-btn active" data-mode="enforcement" id="mobile-mode-enforcement">Enforcement</button>
+            <button type="button" class="mode-btn" data-mode="commercial" id="mobile-mode-commercial">Commercial</button>
+          </div>
+          <div class="setup-grid">
+            <div class="setup-field">
+              <label>Vehicle Registration</label>
+              <input type="text" id="mobile-plate-input" placeholder="e.g. KAA 123X" autocomplete="off">
+            </div>
+            <div class="setup-field" id="mobile-axle-config-field">
+              <label>Axle Configuration</label>
+              <select id="mobile-axle-config-select">
+                <option value="">Select axle configuration...</option>
+              </select>
+            </div>
+            <div class="setup-field hidden" id="mobile-weighing-type-field">
+              <label>This Reading Is</label>
+              <select id="mobile-weighing-type-select">
+                <option value="gross">Gross (loaded)</option>
+                <option value="tare">Tare (empty)</option>
+              </select>
+            </div>
+          </div>
+          <div class="resume-banner" id="mobile-resume-banner">
+            <span id="mobile-resume-text"></span>
+            <div>
+              <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" id="mobile-resume-btn">Resume</button>
+              <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" id="mobile-resume-dismiss-btn">New Instead</button>
+            </div>
+          </div>
+          <div class="weighing-locked-note" id="mobile-locked-note">
+            <i class="fas fa-lock"></i>
+            <span id="mobile-locked-text"></span>
+            <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="mobile-change-vehicle-btn">Change Vehicle</button>
+          </div>
+          <button type="button" class="btn btn-primary" style="width:100%;" id="mobile-start-weighing-btn">
+            <i class="fas fa-play"></i> Start Weighing
+          </button>
+        </div>
+
+        <div class="result-panel status-pending" id="mobile-result-panel">
+          <div class="result-panel-header">
+            <span class="result-panel-status" id="mobile-result-status">-</span>
+            <span class="result-panel-provisional-tag" id="mobile-result-tag">Provisional</span>
+          </div>
+          <div id="mobile-result-body"></div>
+        </div>
+
         <div class="mobile-view">
           <div class="mobile-header">
             <h2>Mobile Scale - Axle Weighing</h2>
@@ -1227,6 +1614,10 @@
                 <i class="fas fa-forward"></i>
                 Skip
               </button>
+              <button class="btn btn-primary" id="btn-mobile-complete" disabled>
+                <i class="fas fa-flag-checkered"></i>
+                Complete Weighing
+              </button>
               <button class="btn btn-danger" id="btn-reset-session">
                 <i class="fas fa-redo"></i>
                 Reset
@@ -1262,6 +1653,18 @@
     let axles = [];
     let currentWeight = 0;
     let isStable = false;
+    let currentDeckWeights = [0, 0, 0, 0];
+
+    // Offline-weighing redesign (2026-09): per-view weighing setup state. A "started"
+    // session locks the setup card and enables capture; captureMode is 'enforcement' |
+    // 'commercial'. resumeCandidate holds a found-but-not-yet-accepted open local
+    // commercial weighing for the typed plate (see checkForResumableWeighing).
+    const weighingSetup = {
+      mobile: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null },
+      multideck: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null }
+    };
+    let localAxleConfigs = [];
+    let plateCheckDebounceTimer = null;
 
     // DOM Elements
     const elements = {};
@@ -1333,6 +1736,44 @@
       elements.btnCaptureAxle = getEl('btn-capture-axle');
       elements.btnSkipAxle = getEl('btn-skip-axle');
       elements.btnResetSession = getEl('btn-reset-session');
+      elements.btnMobileComplete = getEl('btn-mobile-complete');
+
+      // Multideck capture actions
+      elements.multideckActions = getEl('multideck-actions');
+      elements.btnMultideckCapture = getEl('btn-multideck-capture');
+      elements.btnMultideckComplete = getEl('btn-multideck-complete');
+      elements.btnMultideckCancel = getEl('btn-multideck-cancel');
+
+      // Cloud connectivity / pending sync (offline-weighing redesign, 2026-09)
+      elements.cloudBadge = getEl('cloud-badge');
+      elements.cloudBadgeText = getEl('cloud-badge-text');
+      elements.pendingSyncBadge = getEl('pending-sync-badge');
+      elements.pendingSyncCount = getEl('pending-sync-count');
+      elements.pendingPanel = getEl('pending-panel');
+      elements.pendingPanelList = getEl('pending-panel-list');
+
+      // Weighing setup cards (one per view - see setupEls below)
+      ['mobile', 'multideck'].forEach((prefix) => {
+        elements[`${prefix}ModeEnforcement`] = getEl(`${prefix}-mode-enforcement`);
+        elements[`${prefix}ModeCommercial`] = getEl(`${prefix}-mode-commercial`);
+        elements[`${prefix}PlateInput`] = getEl(`${prefix}-plate-input`);
+        elements[`${prefix}AxleConfigField`] = getEl(`${prefix}-axle-config-field`);
+        elements[`${prefix}AxleConfigSelect`] = getEl(`${prefix}-axle-config-select`);
+        elements[`${prefix}WeighingTypeField`] = getEl(`${prefix}-weighing-type-field`);
+        elements[`${prefix}WeighingTypeSelect`] = getEl(`${prefix}-weighing-type-select`);
+        elements[`${prefix}ResumeBanner`] = getEl(`${prefix}-resume-banner`);
+        elements[`${prefix}ResumeText`] = getEl(`${prefix}-resume-text`);
+        elements[`${prefix}ResumeBtn`] = getEl(`${prefix}-resume-btn`);
+        elements[`${prefix}ResumeDismissBtn`] = getEl(`${prefix}-resume-dismiss-btn`);
+        elements[`${prefix}LockedNote`] = getEl(`${prefix}-locked-note`);
+        elements[`${prefix}LockedText`] = getEl(`${prefix}-locked-text`);
+        elements[`${prefix}ChangeVehicleBtn`] = getEl(`${prefix}-change-vehicle-btn`);
+        elements[`${prefix}StartWeighingBtn`] = getEl(`${prefix}-start-weighing-btn`);
+        elements[`${prefix}ResultPanel`] = getEl(`${prefix}-result-panel`);
+        elements[`${prefix}ResultStatus`] = getEl(`${prefix}-result-status`);
+        elements[`${prefix}ResultTag`] = getEl(`${prefix}-result-tag`);
+        elements[`${prefix}ResultBody`] = getEl(`${prefix}-result-body`);
+      });
 
       // Count found elements
       const found = Object.values(elements).filter(el => el !== null && el !== undefined).length;
@@ -1458,11 +1899,40 @@
           resetSession();
         }, 'btnResetSession click');
 
+        trackListener(elements.btnMobileComplete, 'click', () => {
+          console.log('Complete weighing (mobile) clicked');
+          completeMobileWeighing();
+        }, 'btnMobileComplete click');
+
+        // Multideck view actions (offline-weighing redesign, 2026-09)
+        trackListener(elements.btnMultideckCapture, 'click', () => {
+          console.log('Capture reading (multideck) clicked');
+          captureMultideckReading();
+        }, 'btnMultideckCapture click');
+
+        trackListener(elements.btnMultideckComplete, 'click', () => {
+          console.log('Complete weighing (multideck) clicked');
+          completeMultideckWeighing();
+        }, 'btnMultideckComplete click');
+
+        trackListener(elements.btnMultideckCancel, 'click', () => {
+          console.log('Cancel weighing (multideck) clicked');
+          cancelMultideckWeighing();
+        }, 'btnMultideckCancel click');
+
+        trackListener(elements.pendingSyncBadge, 'click', () => {
+          togglePendingPanel();
+        }, 'pendingSyncBadge click');
+
         // Refresh
         trackListener(elements.btnRefresh, 'click', () => {
           console.log('Refresh clicked');
           refreshData();
         }, 'btnRefresh click');
+
+        // Weighing setup cards (both views)
+        wireWeighingSetupCard('mobile');
+        wireWeighingSetupCard('multideck');
 
         console.log(`Event listeners: ${attached} attached, ${failed} failed`);
       } catch (error) {
@@ -1671,6 +2141,12 @@
         const gvw = data.gvw || 0;
         elements.gvwValue.textContent = gvw.toLocaleString();
 
+        // Track current readings so captureMultideckReading() (offline-weighing
+        // redesign) has a clean state source instead of parsing DOM text back out.
+        currentDeckWeights = [data.deck1 || 0, data.deck2 || 0, data.deck3 || 0, data.deck4 || 0];
+        isStable = data.stable !== false;
+        updateMultideckCaptureGate();
+
         // Update deck weights
         if (elements.deck1Weight) elements.deck1Weight.textContent = (data.deck1 || 0).toLocaleString();
         if (elements.deck2Weight) elements.deck2Weight.textContent = (data.deck2 || 0).toLocaleString();
@@ -1697,13 +2173,432 @@
         indicator.classList.remove('unstable');
         indicator.classList.add('stable');
         indicator.innerHTML = '<i class="fas fa-check-circle"></i> <span>Stable</span>';
-        elements.btnCaptureAxle.disabled = false;
+        // Capture also requires a started weighing session (plate + axle config
+        // confirmed) - offline-weighing redesign, 2026-09.
+        elements.btnCaptureAxle.disabled = !weighingSetup.mobile.started;
       } else {
         indicator.classList.remove('stable');
         indicator.classList.add('unstable');
         indicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Unstable</span>';
         elements.btnCaptureAxle.disabled = true;
       }
+    }
+
+    // Enable/disable the multideck "Capture Reading" button (offline-weighing redesign)
+    function updateMultideckCaptureGate() {
+      if (!elements.btnMultideckCapture) return;
+      elements.btnMultideckCapture.disabled = !(weighingSetup.multideck.started && isStable);
+    }
+
+    // ============================================================
+    // Offline-weighing redesign (2026-09): Weighing Setup, Local
+    // Provisional Results, Connectivity + Pending-Sync UI
+    // ============================================================
+
+    function setupPrefixElements(prefix) {
+      return {
+        modeEnforcement: elements[`${prefix}ModeEnforcement`],
+        modeCommercial: elements[`${prefix}ModeCommercial`],
+        plateInput: elements[`${prefix}PlateInput`],
+        axleConfigField: elements[`${prefix}AxleConfigField`],
+        axleConfigSelect: elements[`${prefix}AxleConfigSelect`],
+        weighingTypeField: elements[`${prefix}WeighingTypeField`],
+        weighingTypeSelect: elements[`${prefix}WeighingTypeSelect`],
+        resumeBanner: elements[`${prefix}ResumeBanner`],
+        resumeText: elements[`${prefix}ResumeText`],
+        resumeBtn: elements[`${prefix}ResumeBtn`],
+        resumeDismissBtn: elements[`${prefix}ResumeDismissBtn`],
+        lockedNote: elements[`${prefix}LockedNote`],
+        lockedText: elements[`${prefix}LockedText`],
+        changeVehicleBtn: elements[`${prefix}ChangeVehicleBtn`],
+        startBtn: elements[`${prefix}StartWeighingBtn`],
+        resultPanel: elements[`${prefix}ResultPanel`],
+        resultStatus: elements[`${prefix}ResultStatus`],
+        resultTag: elements[`${prefix}ResultTag`],
+        resultBody: elements[`${prefix}ResultBody`]
+      };
+    }
+
+    // Populate both views' axle-config pickers from the LOCAL mirror
+    // (backend_axle_configurations), so it works even fully offline once at least one
+    // sync has ever completed.
+    async function loadLocalAxleConfigs() {
+      if (!api.listLocalAxleConfigs) return;
+      try {
+        const res = await api.listLocalAxleConfigs();
+        localAxleConfigs = (res && res.configs) || [];
+        ['mobile', 'multideck'].forEach((prefix) => {
+          const select = elements[`${prefix}AxleConfigSelect`];
+          if (!select) return;
+          const current = select.value;
+          select.innerHTML = '<option value="">Select axle configuration...</option>' +
+            localAxleConfigs.map((c) => `<option value="${c.id}" data-code="${c.axleCode}" data-axles="${c.axleNumber}">${c.axleCode} - ${c.axleName || ''} (${c.axleNumber} axles)</option>`).join('');
+          if (current) select.value = current;
+        });
+        if (localAxleConfigs.length === 0) {
+          console.warn('[OfflineCapture] No axle configurations cached locally yet - connect once so ConfigSyncService can populate them before this works fully offline.');
+        }
+      } catch (error) {
+        console.error('Error loading local axle configurations:', error);
+      }
+    }
+
+    function setCaptureMode(prefix, mode) {
+      const s = weighingSetup[prefix];
+      const els = setupPrefixElements(prefix);
+      if (s.started) return; // mode is locked once a weighing has started
+      s.captureMode = mode;
+      if (els.modeEnforcement) els.modeEnforcement.classList.toggle('active', mode === 'enforcement');
+      if (els.modeCommercial) els.modeCommercial.classList.toggle('active', mode === 'commercial');
+      if (els.weighingTypeField) els.weighingTypeField.classList.toggle('hidden', mode !== 'commercial');
+      if (els.resumeBanner) els.resumeBanner.classList.remove('visible');
+      s.resumeCandidate = null;
+    }
+
+    // Commercial only: does the typed plate already have an unfinished LOCAL first-
+    // weight capture on this device? Debounced so it doesn't fire on every keystroke.
+    function checkForResumableWeighing(prefix) {
+      const s = weighingSetup[prefix];
+      const els = setupPrefixElements(prefix);
+      if (s.captureMode !== 'commercial' || !api.findOpenCommercialWeighing) return;
+      const plate = (els.plateInput.value || '').trim();
+      if (!plate) {
+        els.resumeBanner.classList.remove('visible');
+        s.resumeCandidate = null;
+        return;
+      }
+      clearTimeout(plateCheckDebounceTimer);
+      plateCheckDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await api.findOpenCommercialWeighing(plate);
+          const weighing = res && res.weighing;
+          if (weighing) {
+            s.resumeCandidate = weighing;
+            const firstType = weighing.weighingType || 'gross';
+            const returnType = firstType === 'tare' ? 'gross' : 'tare';
+            // Auto-flip the type to the OTHER side of the pair - resuming with the
+            // same type again would silently produce a nonsensical gross-vs-gross (or
+            // tare-vs-tare) "net weight".
+            if (els.weighingTypeSelect) els.weighingTypeSelect.value = returnType;
+            els.resumeText.textContent = `Open ${firstType} weight (${(weighing.gvwMeasuredKg || 0).toLocaleString()}kg) found for ${plate} - resume for its ${returnType} weight?`;
+            els.resumeBanner.classList.add('visible');
+          } else {
+            s.resumeCandidate = null;
+            els.resumeBanner.classList.remove('visible');
+          }
+        } catch (error) {
+          console.warn('Error checking for resumable weighing:', error);
+        }
+      }, 500);
+    }
+
+    async function startWeighing(prefix) {
+      const s = weighingSetup[prefix];
+      const els = setupPrefixElements(prefix);
+      const plate = (els.plateInput.value || '').trim().toUpperCase();
+      if (!plate) {
+        alert('Enter a vehicle registration number first.');
+        return;
+      }
+
+      const axleOption = els.axleConfigSelect && els.axleConfigSelect.selectedOptions[0];
+      const axleConfigurationId = els.axleConfigSelect ? els.axleConfigSelect.value : '';
+      const axleConfigurationCode = axleOption ? axleOption.dataset.code : '';
+      const expectedAxles = axleOption ? (parseInt(axleOption.dataset.axles, 10) || 0) : 0;
+
+      if (s.captureMode === 'enforcement' && !axleConfigurationId) {
+        alert('Select an axle configuration for an enforcement weighing.');
+        return;
+      }
+
+      try {
+        if (s.captureMode === 'commercial') {
+          if (!api.startCommercialWeighing) return;
+          const weighingType = els.weighingTypeSelect ? els.weighingTypeSelect.value : 'gross';
+          const resumeLocalId = s.resumeCandidate ? s.resumeCandidate.localId : undefined;
+          const result = await api.startCommercialWeighing({
+            plateNumber: plate,
+            weighingType,
+            axleConfigurationId: axleConfigurationId || undefined,
+            axleConfigurationCode: axleConfigurationCode || undefined,
+            resumeLocalId
+          });
+          if (!result || !result.success) {
+            alert('Could not start the commercial weighing: ' + ((result && result.error) || 'unknown error'));
+            return;
+          }
+          s.expectedAxles = 1;
+          s.weighingType = weighingType;
+        } else {
+          if (!api.setAxleConfig) return;
+          const result = await api.setAxleConfig({ plateNumber: plate, axleConfigurationId, axleConfigurationCode, expectedAxles });
+          if (!result || !result.success) {
+            alert('Could not start the weighing: ' + ((result && result.error) || 'unknown error'));
+            return;
+          }
+          s.expectedAxles = expectedAxles;
+        }
+
+        s.started = true;
+        s.plateNumber = plate;
+        s.axleConfigurationId = axleConfigurationId;
+        s.axleConfigurationCode = axleConfigurationCode;
+
+        els.plateInput.disabled = true;
+        if (els.axleConfigSelect) els.axleConfigSelect.disabled = true;
+        if (els.weighingTypeSelect) els.weighingTypeSelect.disabled = true;
+        if (els.modeEnforcement) els.modeEnforcement.disabled = true;
+        if (els.modeCommercial) els.modeCommercial.disabled = true;
+        els.startBtn.style.display = 'none';
+        els.resumeBanner.classList.remove('visible');
+        els.lockedText.textContent = `Weighing ${plate}${axleConfigurationCode ? ' - ' + axleConfigurationCode : ''}${s.captureMode === 'commercial' ? ' (' + s.weighingType + ')' : ''}`;
+        els.lockedNote.classList.add('visible');
+        resetResultPanel(prefix);
+
+        if (prefix === 'multideck') {
+          if (elements.multideckActions) elements.multideckActions.style.display = 'flex';
+          updateMultideckCaptureGate();
+        } else {
+          updateStability(isStable);
+        }
+      } catch (error) {
+        console.error('Error starting weighing:', error);
+        alert('Error starting weighing: ' + error.message);
+      }
+    }
+
+    function resetWeighingSetup(prefix) {
+      const s = weighingSetup[prefix];
+      const els = setupPrefixElements(prefix);
+      s.started = false;
+      s.plateNumber = '';
+      s.axleConfigurationId = '';
+      s.axleConfigurationCode = '';
+      s.expectedAxles = 0;
+      s.resumeCandidate = null;
+      s.activeLocalId = null;
+
+      els.plateInput.value = '';
+      els.plateInput.disabled = false;
+      if (els.axleConfigSelect) { els.axleConfigSelect.disabled = false; els.axleConfigSelect.value = ''; }
+      if (els.weighingTypeSelect) els.weighingTypeSelect.disabled = false;
+      if (els.modeEnforcement) els.modeEnforcement.disabled = false;
+      if (els.modeCommercial) els.modeCommercial.disabled = false;
+      els.startBtn.style.display = '';
+      els.lockedNote.classList.remove('visible');
+      els.resumeBanner.classList.remove('visible');
+
+      if (prefix === 'multideck') {
+        if (elements.multideckActions) elements.multideckActions.style.display = 'none';
+        if (elements.btnMultideckComplete) elements.btnMultideckComplete.disabled = true;
+        updateMultideckCaptureGate();
+      } else {
+        if (elements.btnCaptureAxle) elements.btnCaptureAxle.disabled = true;
+        if (elements.btnMobileComplete) elements.btnMobileComplete.disabled = true;
+      }
+    }
+
+    function resetResultPanel(prefix) {
+      const els = setupPrefixElements(prefix);
+      els.resultPanel.className = 'result-panel status-pending';
+      els.resultStatus.textContent = '-';
+      els.resultBody.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.85rem;">No reading captured yet.</span>';
+    }
+
+    // Render a local_weighings record's provisional_result (enforcement compliance or
+    // commercial tare/gross/net) into the given view's result panel.
+    function renderLocalWeighingResult(prefix, localWeighing) {
+      if (!localWeighing) return;
+      const els = setupPrefixElements(prefix);
+      const s = weighingSetup[prefix];
+      s.activeLocalId = localWeighing.localId;
+      const result = localWeighing.provisionalResult;
+      const isOffline = ['queued', 'awaiting_station_resolution', 'local_only'].includes(localWeighing.syncStatus);
+      els.resultTag.textContent = isOffline ? 'Provisional - offline' : 'Provisional';
+
+      if (!result) {
+        els.resultPanel.className = 'result-panel status-pending visible';
+        els.resultStatus.textContent = localWeighing.mode === 'commercial' ? 'First weight recorded' : 'Captured';
+        els.resultBody.innerHTML = localWeighing.mode === 'commercial'
+          ? `<div>${(localWeighing.gvwMeasuredKg || 0).toLocaleString()} kg (${localWeighing.weighingType || 'gross'}) recorded. Vehicle should return for its ${localWeighing.weighingType === 'tare' ? 'gross' : 'tare'} weight to compute net.</div>`
+          : `<div>${(localWeighing.gvwMeasuredKg || 0).toLocaleString()} kg captured. Local compliance preview needs the axle configuration's weight references and tolerance settings to be synced at least once.</div>`;
+        return;
+      }
+
+      if (result.overallStatus) {
+        // Enforcement compliance result (ComplianceEngine.computeOfflineComplianceFromDb)
+        const statusClass = result.overallStatus === 'LEGAL' ? 'status-legal' : result.overallStatus === 'WARNING' ? 'status-warning' : 'status-overload';
+        els.resultPanel.className = `result-panel ${statusClass} visible`;
+        els.resultStatus.textContent = result.overallStatus;
+        const rows = (result.groupResults || []).map((g) => `
+          <tr class="${g.status === 'OVERLOAD' ? 'overload' : g.status === 'WARNING' ? 'warning' : ''}">
+            <td>Group ${g.groupLabel}</td>
+            <td>${g.groupWeightKg.toLocaleString()} kg</td>
+            <td>${g.effectiveLimitKg.toLocaleString()} kg</td>
+            <td>${g.overloadKg > 0 ? '+' + g.overloadKg.toLocaleString() + ' kg' : '-'}</td>
+          </tr>`).join('');
+        els.resultBody.innerHTML = `
+          <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
+            GVW ${result.gvwMeasuredKg.toLocaleString()} kg / limit ${result.gvwEffectiveLimitKg.toLocaleString()} kg${result.gvwOverloadKg > 0 ? ` (over by ${result.gvwOverloadKg.toLocaleString()} kg)` : ''}
+          </div>
+          <table class="result-groups-table">
+            <thead><tr><th>Axle Group</th><th>Weight</th><th>Limit (+tol)</th><th>Overload</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      } else if ('netWeightKg' in result) {
+        // Commercial capture result (ComplianceEngine.computeCommercialCaptureResult)
+        els.resultPanel.className = 'result-panel status-legal visible';
+        els.resultStatus.textContent = `Net ${result.netWeightKg.toLocaleString()} kg`;
+        els.resultBody.innerHTML = `
+          <div style="font-size:0.85rem; color: var(--text-secondary);">
+            Tare ${result.tareWeightKg.toLocaleString()} kg &middot; Gross ${result.grossWeightKg.toLocaleString()} kg
+          </div>
+          <div style="margin-top:6px; font-size:0.8rem; color: var(--text-secondary);">
+            Tolerance check pending cloud sync - complete the real transaction through the commercial weighing screen once online.
+          </div>`;
+      }
+    }
+
+    // ----- Multideck capture (built from scratch - previously had zero interactive
+    // capture elements at all). Each deck maps to one axle POSITION (not a group) -
+    // ComplianceEngine's own axle-grouping lookup (from the synced weight references)
+    // determines which group each position belongs to, so this stays correct
+    // regardless of the axle configuration's actual group layout. -----
+
+    async function captureMultideckReading() {
+      const s = weighingSetup.multideck;
+      if (!s.started || !api.sendAxleCaptured) return;
+      elements.btnMultideckCapture.disabled = true;
+      let lastResponse = null;
+
+      if (s.captureMode === 'commercial') {
+        // Commercial only ever needs ONE reading per visit (tare or gross) - the
+        // vehicle sits across all 4 decks at once, so that reading is their SUM
+        // (matches the GVW tile), never a single deck's value.
+        const totalWeight = currentDeckWeights.reduce((sum, w) => sum + (w || 0), 0);
+        try {
+          lastResponse = await api.sendAxleCaptured({ axleNumber: 1, weight: totalWeight });
+        } catch (error) {
+          console.error('Error capturing multideck commercial reading:', error);
+        }
+      } else {
+        // Enforcement: each deck is one axle POSITION - ComplianceEngine's own
+        // axle-grouping lookup (from synced weight references) determines which group
+        // each position belongs to, so this stays correct regardless of layout.
+        const count = s.expectedAxles > 0 ? Math.min(s.expectedAxles, 4) : 4;
+        if (s.expectedAxles > 4) {
+          console.warn(`[Multideck] Axle configuration expects ${s.expectedAxles} axles but this platform has 4 decks - capturing the first 4 positions only.`);
+        }
+        for (let i = 0; i < count; i++) {
+          try {
+            lastResponse = await api.sendAxleCaptured({ axleNumber: i + 1, weight: currentDeckWeights[i] });
+          } catch (error) {
+            console.error(`Error capturing deck ${i + 1}:`, error);
+          }
+        }
+      }
+      if (lastResponse && lastResponse.localWeighing) {
+        renderLocalWeighingResult('multideck', lastResponse.localWeighing);
+      }
+      if (elements.btnMultideckComplete) {
+        elements.btnMultideckComplete.disabled = !(lastResponse && lastResponse.isComplete);
+      }
+      updateMultideckCaptureGate();
+    }
+
+    async function completeMultideckWeighing() {
+      const s = weighingSetup.multideck;
+      if (!s.started || !api.sendVehicleComplete) return;
+      try {
+        const result = await api.sendVehicleComplete({ plateNumber: s.plateNumber, axleConfigurationId: s.axleConfigurationId });
+        if (result && result.localWeighing) {
+          renderLocalWeighingResult('multideck', result.localWeighing);
+        }
+        resetWeighingSetup('multideck');
+        refreshPendingBadge();
+      } catch (error) {
+        console.error('Error completing multideck weighing:', error);
+      }
+    }
+
+    async function cancelMultideckWeighing() {
+      if (api.sendResetSession) {
+        try { await api.sendResetSession(); } catch (error) { console.warn('Error cancelling:', error); }
+      }
+      resetWeighingSetup('multideck');
+      resetResultPanel('multideck');
+    }
+
+    // ----- Cloud connectivity + pending-sync glance -----
+
+    function updateCloudBadge(online) {
+      if (!elements.cloudBadge) return;
+      elements.cloudBadge.classList.remove('online', 'offline', 'unknown');
+      if (online === true) {
+        elements.cloudBadge.classList.add('online');
+        elements.cloudBadgeText.textContent = 'Cloud: Online';
+      } else if (online === false) {
+        elements.cloudBadge.classList.add('offline');
+        elements.cloudBadgeText.textContent = 'Cloud: Offline - capturing locally';
+      } else {
+        elements.cloudBadge.classList.add('unknown');
+        elements.cloudBadgeText.textContent = 'Cloud: checking...';
+      }
+    }
+
+    async function refreshPendingBadge() {
+      if (!api.countPendingLocalWeighings) return;
+      try {
+        const res = await api.countPendingLocalWeighings();
+        const count = (res && res.count) || 0;
+        elements.pendingSyncCount.textContent = count;
+        elements.pendingSyncBadge.classList.toggle('visible', count > 0);
+      } catch (error) {
+        console.warn('Error refreshing pending sync count:', error);
+      }
+    }
+
+    async function togglePendingPanel() {
+      const panel = elements.pendingPanel;
+      if (!panel) return;
+      const willShow = !panel.classList.contains('visible');
+      panel.classList.toggle('visible', willShow);
+      if (!willShow || !api.listPendingLocalWeighings) return;
+      try {
+        const res = await api.listPendingLocalWeighings(25);
+        const items = (res && res.weighings) || [];
+        elements.pendingPanelList.innerHTML = items.length === 0
+          ? '<div class="pending-empty">Nothing pending - all captures are synced.</div>'
+          : items.map((w) => `
+            <div class="pending-item">
+              <div class="pending-item-plate">${w.vehicleRegNumber} <span style="color: var(--text-secondary); font-weight: 400;">(${w.mode})</span></div>
+              <div class="pending-item-meta">${(w.gvwMeasuredKg || 0).toLocaleString()} kg &middot; ${String(w.syncStatus).replace(/_/g, ' ')} &middot; ${new Date(w.capturedAt).toLocaleString()}</div>
+            </div>`).join('');
+      } catch (error) {
+        console.warn('Error loading pending weighings:', error);
+      }
+    }
+
+    // Wire up both views' setup cards (mode toggle, plate input, start/resume/change
+    // buttons). Called once from initializeEventListeners().
+    function wireWeighingSetupCard(prefix) {
+      const els = setupPrefixElements(prefix);
+      if (els.modeEnforcement) els.modeEnforcement.addEventListener('click', () => setCaptureMode(prefix, 'enforcement'));
+      if (els.modeCommercial) els.modeCommercial.addEventListener('click', () => setCaptureMode(prefix, 'commercial'));
+      if (els.plateInput) els.plateInput.addEventListener('input', () => checkForResumableWeighing(prefix));
+      if (els.startBtn) els.startBtn.addEventListener('click', () => startWeighing(prefix));
+      if (els.resumeDismissBtn) els.resumeDismissBtn.addEventListener('click', () => {
+        weighingSetup[prefix].resumeCandidate = null;
+        els.resumeBanner.classList.remove('visible');
+      });
+      if (els.resumeBtn) els.resumeBtn.addEventListener('click', () => startWeighing(prefix));
+      if (els.changeVehicleBtn) els.changeVehicleBtn.addEventListener('click', async () => {
+        if (api.sendResetSession) {
+          try { await api.sendResetSession(); } catch (error) { console.warn(error); }
+        }
+        resetWeighingSetup(prefix);
+        resetResultPanel(prefix);
+      });
     }
 
     // Update vehicle status
@@ -1779,9 +2674,13 @@
           const result = await api.sendAxleCaptured({ axleNumber, weight: weightToCapture });
           console.log(`Axle ${axleNumber} captured: ${weightToCapture}kg, Response:`, result);
 
-          // Sync session from backend response if available
-          if (result && result.success) {
-            // The weights-updated event will handle syncing
+          // Offline-weighing redesign (2026-09): show the local provisional result as
+          // soon as it exists, and unlock "Complete Weighing" once all axles are in.
+          if (result && result.localWeighing) {
+            renderLocalWeighingResult('mobile', result.localWeighing);
+          }
+          if (elements.btnMobileComplete) {
+            elements.btnMobileComplete.disabled = !(result && result.isComplete);
           }
         } catch (error) {
           console.error('Error capturing axle:', error);
@@ -1804,6 +2703,26 @@
       console.log(`Skipped axle ${axleNumber}`);
     }
 
+    // Complete the mobile weighing (offline-weighing redesign, 2026-09) - wires the
+    // previously-dead mobile:vehicle-complete IPC path to an actual UI action.
+    async function completeMobileWeighing() {
+      if (!weighingSetup.mobile.started || !api.sendVehicleComplete) return;
+      const s = weighingSetup.mobile;
+      try {
+        const result = await api.sendVehicleComplete({
+          plateNumber: s.plateNumber,
+          axleConfigurationId: s.axleConfigurationId
+        });
+        if (result && result.localWeighing) {
+          renderLocalWeighingResult('mobile', result.localWeighing);
+        }
+        resetWeighingSetup('mobile');
+        refreshPendingBadge();
+      } catch (error) {
+        console.error('Error completing mobile weighing:', error);
+      }
+    }
+
     // Reset session
     async function resetSession() {
       // Clear local state immediately for UI feedback
@@ -1820,6 +2739,11 @@
           console.error('Error resetting session:', error);
         }
       }
+
+      // Offline-weighing redesign: a Reset also abandons the current weighing setup
+      // (plate/axle config) and any displayed result, not just the captured-axles array.
+      resetWeighingSetup('mobile');
+      resetResultPanel('mobile');
 
       console.log('Session reset complete');
     }
@@ -2204,6 +3128,35 @@
           // Theme changes could be applied here too if needed
         });
       }
+
+      // Offline-weighing redesign (2026-09): cloud connectivity + pending-sync wiring.
+      // backend:online/offline were previously emitted only in the main process and
+      // never reached this renderer at all.
+      if (api.onBackendConnectivityChanged) {
+        api.onBackendConnectivityChanged((data) => {
+          console.log('Cloud connectivity changed:', data);
+          updateCloudBadge(data.online);
+          if (data.online) refreshPendingBadge();
+        });
+      }
+      if (api.onStationUnresolved) {
+        api.onStationUnresolved(() => {
+          console.warn('[OfflineCapture] Station code has not resolved to a backend GUID yet - captures will be held as awaiting_station_resolution.');
+        });
+      }
+      if (api.onStationResolved) {
+        api.onStationResolved(() => {
+          console.log('[OfflineCapture] Station resolved - captures can now queue for sync.');
+        });
+      }
+
+      await loadLocalAxleConfigs();
+      await refreshPendingBadge();
+      // Reference data (axle configs/tolerances) and the pending queue both change
+      // slowly relative to a capture session - a light periodic refresh is enough to
+      // keep the picker and badge honest without polling aggressively.
+      setInterval(loadLocalAxleConfigs, 5 * 60 * 1000);
+      setInterval(refreshPendingBadge, 30 * 1000);
 
       // Get initial data and settings
       try {
