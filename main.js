@@ -730,6 +730,38 @@ function sendConnectionStatus(connected, source, type, error, protocol = null) {
 }
 
 // =============================================
+// Cloud Connectivity Event Forwarding (offline-weighing redesign, 2026-09)
+// =============================================
+// BackendClient already emits these on every online/offline state transition
+// (_pollConnection) and ConfigSyncService already emits the station-unresolved one -
+// neither was ever piped to a renderer before, so the capture screens had no way to
+// show "you are offline" at all. Forward as-is; capture-screen UI decides what to do.
+
+EventBus.on('backend:online', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('backend-connectivity-changed', { online: true, ...data });
+  }
+});
+
+EventBus.on('backend:offline', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('backend-connectivity-changed', { online: false, ...data });
+  }
+});
+
+EventBus.on('config-sync:station-unresolved', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('config-sync-station-unresolved', data);
+  }
+});
+
+EventBus.on('config-sync:station-resolved', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('config-sync-station-resolved', data);
+  }
+});
+
+// =============================================
 // Connection Pool Event Forwarding
 // =============================================
 
@@ -1457,6 +1489,109 @@ ipcMain.handle('mobile:cancel-weighing', async (event, reason) => {
     return { success: true, message: 'Session cancelled' };
   } catch (error) {
     console.error('Error cancelling weighing:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// =============================================
+// Offline Capture UI Handlers (offline-weighing redesign, 2026-09)
+// =============================================
+// New handlers backing the Mobile/Multideck capture screens' plate + axle-config entry,
+// commercial two-pass local resume, and the "pending sync" glance - none of these
+// existed before, which is a large part of why a genuine end-to-end capture (online or
+// offline) could never be completed from TruConnect's own UI (see the redesign plan).
+
+// List axle configurations from the LOCAL mirror (backend_axle_configurations +
+// backend_axle_weight_references, kept fresh by ConfigSyncService) so the picker works
+// even fully offline, as long as at least one sync has ever completed.
+ipcMain.handle('axle-config:list-local', async () => {
+  try {
+    const db = Database.getDb();
+    const rows = db.all(
+      'SELECT id, axle_code, axle_name, axle_number, gvw_permissible_kg FROM backend_axle_configurations WHERE is_active = 1 ORDER BY axle_number, axle_code'
+    );
+    return { success: true, configs: rows.map((r) => ({
+      id: r.id,
+      axleCode: r.axle_code,
+      axleName: r.axle_name,
+      axleNumber: r.axle_number,
+      gvwPermissibleKg: r.gvw_permissible_kg
+    })) };
+  } catch (error) {
+    console.error('Error listing local axle configurations:', error);
+    return { success: false, error: error.message, configs: [] };
+  }
+});
+
+// Pending-sync glance for the capture screens (not just buried in Settings).
+ipcMain.handle('local-weighing:list-pending', async (event, limit) => {
+  try {
+    const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+    return { success: true, weighings: LocalWeighingStore.listPending(limit) };
+  } catch (error) {
+    console.error('Error listing pending local weighings:', error);
+    return { success: false, error: error.message, weighings: [] };
+  }
+});
+
+ipcMain.handle('local-weighing:count-pending', async () => {
+  try {
+    const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+    return { success: true, count: LocalWeighingStore.countPending() };
+  } catch (error) {
+    console.error('Error counting pending local weighings:', error);
+    return { success: false, error: error.message, count: 0 };
+  }
+});
+
+// Commercial two-pass: does this plate already have an unfinished LOCAL capture
+// (first weight recorded on THIS device, vehicle not yet returned)? Lightweight
+// counterpart to truload-frontend's ResumeWeighingDialog - one candidate, not a full
+// reweigh-history list, since TruConnect's commercial capture never finalizes the real
+// transaction itself (see startCommercialSession's local_only design).
+ipcMain.handle('commercial:find-open-weighing', async (event, { plateNumber } = {}) => {
+  try {
+    const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+    const open = LocalWeighingStore.listOpenByPlate(plateNumber, 'commercial');
+    return { success: true, weighing: open[0] || null };
+  } catch (error) {
+    console.error('Error finding open commercial weighing:', error);
+    return { success: false, error: error.message, weighing: null };
+  }
+});
+
+// Start (or resume) a commercial capture session. Reuses the SAME 1-axle
+// mobile:capture-axle / mobile:vehicle-complete plumbing enforcement uses - a
+// commercial visit is exactly one scale reading (tare or gross), never a per-axle
+// breakdown, so modelling it as "1 expected axle" needs zero new capture primitives.
+ipcMain.handle('commercial:start-weighing', async (event, params = {}) => {
+  try {
+    const { plateNumber, weighingType, axleConfigurationId, axleConfigurationCode, resumeLocalId } = params;
+    if (!plateNumber) {
+      return { success: false, error: 'plateNumber is required' };
+    }
+
+    let resume = null;
+    if (resumeLocalId) {
+      const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+      const record = LocalWeighingStore.get(resumeLocalId);
+      if (record && !record.isFinal) {
+        resume = { localId: record.localId, firstWeightKg: record.gvwMeasuredKg, firstWeightType: record.weighingType };
+      }
+    }
+
+    BackendClient.startCommercialSession({ plateNumber, axleConfigurationId, axleConfigurationCode, weighingType, resume });
+    StateManager.setAxleConfiguration({
+      expectedAxles: 1,
+      axleConfigurationId: axleConfigurationId || null,
+      axleConfigurationCode: axleConfigurationCode || 'COMMERCIAL',
+      plateNumber
+    });
+    StateManager.setAutoDetection(true, { zeroThreshold: 50, stableThreshold: 100, requiredStableReadings: 3 });
+
+    return { success: true, session: BackendClient.getStatus().currentSession, resumed: Boolean(resume) };
+  } catch (error) {
+    console.error('Error starting commercial weighing:', error);
     return { success: false, error: error.message };
   }
 });

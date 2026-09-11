@@ -41,6 +41,12 @@ const validInvokeChannels = [
   'scale:simulate-connection',
   // Connection pool
   'pool:get-clients',
+  // Offline capture UI (offline-weighing redesign, 2026-09)
+  'axle-config:list-local',
+  'local-weighing:list-pending',
+  'local-weighing:count-pending',
+  'commercial:find-open-weighing',
+  'commercial:start-weighing',
   // System
   'app:get-version',
   'app:restart',
@@ -68,6 +74,10 @@ const validReceiveChannels = [
   // Station events
   'station:updated',
   'station:bound-changed',
+  // Cloud connectivity events (offline-weighing redesign, 2026-09)
+  'backend-connectivity-changed',
+  'config-sync-station-unresolved',
+  'config-sync-station-resolved',
   // Scale events
   'scale:status-changed',
   // Connection pool events
@@ -415,6 +425,48 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('pool:updated', subscription);
     return () => ipcRenderer.removeListener('pool:updated', subscription);
+  },
+
+  // =====================
+  // Offline Capture UI APIs (offline-weighing redesign, 2026-09)
+  // =====================
+
+  listLocalAxleConfigs: () => {
+    return ipcRenderer.invoke('axle-config:list-local');
+  },
+
+  listPendingLocalWeighings: (limit) => {
+    return ipcRenderer.invoke('local-weighing:list-pending', limit);
+  },
+
+  countPendingLocalWeighings: () => {
+    return ipcRenderer.invoke('local-weighing:count-pending');
+  },
+
+  findOpenCommercialWeighing: (plateNumber) => {
+    return ipcRenderer.invoke('commercial:find-open-weighing', { plateNumber });
+  },
+
+  startCommercialWeighing: (params) => {
+    return ipcRenderer.invoke('commercial:start-weighing', params);
+  },
+
+  onBackendConnectivityChanged: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('backend-connectivity-changed', subscription);
+    return () => ipcRenderer.removeListener('backend-connectivity-changed', subscription);
+  },
+
+  onStationUnresolved: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('config-sync-station-unresolved', subscription);
+    return () => ipcRenderer.removeListener('config-sync-station-unresolved', subscription);
+  },
+
+  onStationResolved: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('config-sync-station-resolved', subscription);
+    return () => ipcRenderer.removeListener('config-sync-station-resolved', subscription);
   },
 
   // =====================

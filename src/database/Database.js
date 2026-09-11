@@ -420,6 +420,81 @@ class DatabaseManager {
           );
           CREATE INDEX IF NOT EXISTS idx_backend_axle_configs_code ON backend_axle_configurations(axle_code);
         `
+      },
+      {
+        // Backend-synced mirror of each AxleConfiguration's AxleWeightReference children
+        // (offline-weighing redesign, 2026-09). The list endpoint TruConnect already calls
+        // for backend_axle_configurations returns these nested in each row's JSON body
+        // (AxleConfigurationRepository.GetAllAsync eager-loads them) - this table just
+        // explodes that already-fetched data into a queryable shape for ComplianceEngine.js,
+        // no second network endpoint needed.
+        name: '017_create_backend_axle_weight_references',
+        sql: `
+          CREATE TABLE IF NOT EXISTS backend_axle_weight_references (
+            id TEXT PRIMARY KEY,
+            axle_configuration_id TEXT NOT NULL,
+            axle_position INTEGER NOT NULL,
+            axle_legal_weight_kg INTEGER NOT NULL DEFAULT 0,
+            axle_group_id TEXT,
+            axle_grouping TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            raw_json TEXT NOT NULL,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_axle_weight_refs_config ON backend_axle_weight_references(axle_configuration_id);
+        `
+      },
+      {
+        // Backend-synced mirror of truload-backend's ToleranceSetting catalog
+        // (GET /api/v1/acts/tolerances?legalFramework=, offline-weighing redesign 2026-09).
+        // Required by ComplianceEngine.js for GVW/axle-group tolerance resolution - without
+        // this, only a flat GVW-permissible comparison is possible, not a real per-group
+        // OVERLOAD/WARNING/LEGAL decision.
+        name: '018_create_backend_tolerance_settings',
+        sql: `
+          CREATE TABLE IF NOT EXISTS backend_tolerance_settings (
+            id TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            legal_framework TEXT NOT NULL,
+            tolerance_percentage REAL NOT NULL DEFAULT 0,
+            tolerance_kg INTEGER,
+            applies_to TEXT NOT NULL DEFAULT '',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            raw_json TEXT NOT NULL,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_tolerance_settings_code ON backend_tolerance_settings(code);
+          CREATE INDEX IF NOT EXISTS idx_tolerance_settings_framework ON backend_tolerance_settings(legal_framework);
+        `
+      },
+      {
+        // One row per PHYSICAL weighing (offline-weighing redesign, 2026-09) - distinct from
+        // weighing_queue, which is one row per NETWORK CALL (autoweigh or complete). This is
+        // what lets the capture UI show "your pending offline captures" and what carries the
+        // locally-computed provisional decision, independent of SyncQueue's transport-only
+        // internals. local_id doubles as the ClientLocalId used for the autoweigh network call.
+        name: '019_create_local_weighings',
+        sql: `
+          CREATE TABLE IF NOT EXISTS local_weighings (
+            local_id TEXT PRIMARY KEY,
+            mode TEXT NOT NULL CHECK(mode IN ('enforcement', 'commercial')),
+            vehicle_reg_number TEXT NOT NULL,
+            axle_configuration_id TEXT,
+            weighing_type TEXT,
+            axle_readings TEXT NOT NULL DEFAULT '[]',
+            gvw_measured_kg INTEGER,
+            provisional_result TEXT,
+            capture_source TEXT NOT NULL DEFAULT 'auto',
+            captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_final INTEGER NOT NULL DEFAULT 0,
+            backend_transaction_id TEXT,
+            sync_status TEXT NOT NULL DEFAULT 'pending' CHECK(sync_status IN ('pending', 'queued', 'awaiting_station_resolution', 'synced', 'dead_letter', 'local_only')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_local_weighings_sync_status ON local_weighings(sync_status);
+          CREATE INDEX IF NOT EXISTS idx_local_weighings_vehicle ON local_weighings(vehicle_reg_number);
+        `
       }
     ];
   }

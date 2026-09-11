@@ -272,12 +272,46 @@ class BackendClient {
       autoweighGvw: 0,
       // Fresh id for this physical weighing - groups its autoweigh+complete sync-queue rows.
       // Generated here (not lazily inside sendAutoweigh) so it's stable across both calls
-      // even if the app restarts between them.
-      localSessionId: crypto.randomUUID()
+      // even if the app restarts between them. `vehicleInfo.localSessionId` lets a
+      // commercial resume (see startCommercialSession) reuse an existing local_weighings
+      // row's id instead of starting a brand new physical-weighing record.
+      localSessionId: vehicleInfo.localSessionId || crypto.randomUUID(),
+      // Commercial two-pass only: the OTHER weight of this transaction, carried across a
+      // resume so completeSession can compute tare/gross/net locally (see
+      // startCommercialSession / computeCommercialCaptureResult).
+      commercialFirstWeightKg: vehicleInfo.commercialFirstWeightKg ?? null,
+      commercialFirstWeightType: vehicleInfo.commercialFirstWeightType || null,
+      // Commercial only: which side of the pair THIS visit's single reading represents.
+      weighingType: vehicleInfo.weighingType || null,
+      axleConfigurationCode: vehicleInfo.axleConfigurationCode || null
     };
 
     console.log(`[BackendClient] Session started for vehicle: ${this.currentSession.vehicleRegNumber || 'unknown'}${this.currentSession.weighingTransactionId ? ` (txnId: ${this.currentSession.weighingTransactionId})` : ''}`);
     this.eventBus.emitEvent('backend:session-started', this.currentSession);
+  }
+
+  /**
+   * Start (or resume) a commercial two-pass weighing session. Unlike enforcement's
+   * axle-by-axle capture, commercial mode captures exactly ONE reading per visit
+   * (tare or gross) - modelled here as a 1-axle "axle configuration" so it reuses the
+   * SAME mobile:capture-axle / mobile:vehicle-complete plumbing enforcement already has,
+   * with zero new capture primitives.
+   *
+   * @param {{plateNumber:string, axleConfigurationId?:string, axleConfigurationCode?:string,
+   *   weighingType:'tare'|'gross', resume?: {localId:string, firstWeightKg:number, firstWeightType:string}}} params
+   */
+  startCommercialSession({ plateNumber, axleConfigurationId, axleConfigurationCode, weighingType, resume }) {
+    this.startSession({
+      regNumber: plateNumber,
+      axleConfigurationId: axleConfigurationId || null,
+      axleConfigurationCode: axleConfigurationCode || null,
+      weighingMode: 'commercial',
+      weighingType: weighingType || 'gross',
+      localSessionId: resume ? resume.localId : undefined,
+      commercialFirstWeightKg: resume ? resume.firstWeightKg : null,
+      commercialFirstWeightType: resume ? resume.firstWeightType : null
+    });
+    return this.getSession();
   }
 
   /**
@@ -317,25 +351,94 @@ class BackendClient {
       return null;
     }
 
-    if (!this.config.enabled || !this.config.baseUrl || !this.config.stationId) {
-      console.log('[BackendClient] Backend not configured - skipping autoweigh submission');
-      return null;
-    }
-
     if (!this.currentSession.localSessionId) {
       // Defensive fallback - normally set by startSession()
       this.currentSession.localSessionId = crypto.randomUUID();
+    }
+    const localId = this.currentSession.localSessionId;
+    const axleConfigurationId = weighingData.axleConfigurationId || this.currentSession.axleConfigurationId || null;
+    const mode = this.currentSession.weighingMode === 'commercial' ? 'commercial' : 'enforcement';
+    const vehicleRegNumber = weighingData.plateNumber || this.currentSession.vehicleRegNumber || 'UNKNOWN';
+
+    // Always compute a local provisional decision and persist a physical-weighing
+    // record FIRST, regardless of backend/station configuration - closes a real gap
+    // where an unresolved stationId caused this whole capture to silently vanish
+    // before anything was ever written anywhere (see the offline-weighing redesign
+    // plan's Phase 4). LocalWeighingStore is separate from the network-call-shaped
+    // weighing_queue: one row per PHYSICAL weighing, queryable by the capture UI.
+    const LocalWeighingStore = require('./LocalWeighingStore');
+    let provisionalResult = null;
+    if (mode === 'enforcement' && axleConfigurationId) {
+      try {
+        const ComplianceEngine = require('./ComplianceEngine');
+        provisionalResult = ComplianceEngine.computeOfflineComplianceFromDb(require('../database/Database').getDb(), {
+          axleConfigurationId,
+          axles: weighingData.axles.map((axle, index) => ({
+            axleNumber: axle.axleNumber || (index + 1),
+            measuredWeightKg: axle.weight
+          }))
+        });
+      } catch (err) {
+        console.warn('[BackendClient] Local compliance computation failed (will still capture the raw reading):', err.message);
+      }
+    } else if (mode === 'commercial' && this.currentSession.commercialFirstWeightKg != null) {
+      // A resumed second-visit reading (see startCommercialSession) - preview the net
+      // weight as soon as this visit's reading stabilizes, even before "Complete
+      // Weighing" is clicked. toleranceExceeded stays unresolvable offline by design.
+      const ComplianceEngine = require('./ComplianceEngine');
+      provisionalResult = ComplianceEngine.computeCommercialCaptureResult({
+        firstWeightKg: this.currentSession.commercialFirstWeightKg,
+        firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
+        secondWeightKg: weighingData.gvw
+      });
+    }
+
+    // Commercial mode NEVER queues a network call in this codebase: the real backend
+    // route for a commercial weighing is CommercialWeighingController's own
+    // transaction-scoped endpoints (a different request shape entirely - a pre-existing
+    // TransporterId/CargoId-bearing transaction, not an axles[] array), not this
+    // enforcement-shaped WeighingController /autoweigh endpoint. Posting a commercial
+    // capture there would silently create a malformed/misrouted enforcement record.
+    // local_only means exactly that: captured + previewed here for the operator's own
+    // reference, but the real commercial transaction/billing must still be completed
+    // through the normal commercial weighing screen once back online.
+    const stationReady = Boolean(this.config.enabled && this.config.baseUrl && this.config.stationId);
+    const syncStatus = mode === 'commercial' ? 'local_only' : stationReady ? 'queued' : 'awaiting_station_resolution';
+    LocalWeighingStore.upsert({
+      localId,
+      mode,
+      vehicleRegNumber,
+      axleConfigurationId,
+      weighingType: this.currentSession.weighingType || weighingData.weighingType || null,
+      axleReadings: weighingData.axles,
+      gvwMeasuredKg: weighingData.gvw ?? null,
+      provisionalResult,
+      captureSource: 'auto',
+      isFinal: false,
+      syncStatus
+    });
+
+    if (mode === 'commercial') {
+      console.log('[BackendClient] Commercial reading captured locally (preview only) - complete the real transaction through the commercial weighing screen once online');
+      this.eventBus.emitEvent('backend:autoweigh-captured-locally', { localId, vehicleRegNumber, provisionalResult, mode });
+      return null;
+    }
+
+    if (!stationReady) {
+      console.log('[BackendClient] Captured locally (awaiting station resolution or backend config) - will queue for sync once resolved');
+      this.eventBus.emitEvent('backend:autoweigh-captured-locally', { localId, vehicleRegNumber, provisionalResult, mode });
+      return null;
     }
 
     const payload = {
       stationId: this.config.stationId,
       bound: this.config.bound,
-      vehicleRegNumber: weighingData.plateNumber || this.currentSession.vehicleRegNumber || 'UNKNOWN',
+      vehicleRegNumber,
       vehicleId: weighingData.vehicleId || this.currentSession.vehicleId,
       axles: weighingData.axles.map((axle, index) => ({
         axleNumber: axle.axleNumber || (index + 1),
         measuredWeightKg: axle.weight,
-        axleConfigurationId: weighingData.axleConfigurationId || this.currentSession.axleConfigurationId
+        axleConfigurationId
       })),
       weighingMode: this.currentSession.weighingMode || 'mobile',
       capturedAt: new Date().toISOString(),
@@ -351,7 +454,7 @@ class BackendClient {
     // attempt. attempt() then tries to send it immediately - if that succeeds we get
     // the same synchronous result as before; if not, the row stays queued and the
     // sync queue's own retry/backoff/drain machinery takes over.
-    const queueRow = this._queueForSync('autoweigh', payload, this.currentSession.localSessionId);
+    const queueRow = this._queueForSync('autoweigh', payload, localId);
 
     const SyncQueue = require('./SyncQueue');
     const result = await SyncQueue.attempt(queueRow.id);
@@ -361,6 +464,8 @@ class BackendClient {
       this.currentSession.transactionId = result.weighingId;
       this.currentSession.isAutoweighSent = true;
       this.currentSession.autoweighGvw = weighingData.gvw;
+
+      LocalWeighingStore.markSyncStatus(localId, 'queued', result.weighingId);
 
       console.log(`[BackendClient] Autoweigh sent successfully: TransactionId=${result.weighingId}, Ticket=${result.ticketNumber}`);
 
@@ -393,26 +498,89 @@ class BackendClient {
       return null;
     }
 
-    if (!this.config.enabled || !this.config.baseUrl || !this.config.stationId) {
-      console.log('[BackendClient] Backend not configured - skipping session completion');
-      return null;
-    }
-
     if (!this.currentSession.localSessionId) {
       // Defensive fallback - normally set by startSession()
       this.currentSession.localSessionId = crypto.randomUUID();
     }
     const localSessionId = this.currentSession.localSessionId;
+    const axleConfigurationId = finalData.axleConfigurationId || this.currentSession.axleConfigurationId || null;
+    const mode = this.currentSession.weighingMode === 'commercial' ? 'commercial' : 'enforcement';
+    const vehicleRegNumber = finalData.plateNumber || this.currentSession.vehicleRegNumber || 'UNKNOWN';
+
+    // Same "always capture locally first" fix as sendAutoweigh (Phase 4 of the
+    // offline-weighing redesign) - a finalize action must never silently vanish either.
+    const LocalWeighingStore = require('./LocalWeighingStore');
+    let provisionalResult = null;
+    if (mode === 'enforcement' && axleConfigurationId) {
+      try {
+        const ComplianceEngine = require('./ComplianceEngine');
+        provisionalResult = ComplianceEngine.computeOfflineComplianceFromDb(require('../database/Database').getDb(), {
+          axleConfigurationId,
+          axles: finalData.axles.map((axle, index) => ({
+            axleNumber: axle.axleNumber || (index + 1),
+            measuredWeightKg: axle.weight
+          }))
+        });
+      } catch (err) {
+        console.warn('[BackendClient] Local compliance computation failed (will still capture the raw reading):', err.message);
+      }
+    } else if (mode === 'commercial' && this.currentSession.commercialFirstWeightKg != null) {
+      const ComplianceEngine = require('./ComplianceEngine');
+      provisionalResult = ComplianceEngine.computeCommercialCaptureResult({
+        firstWeightKg: this.currentSession.commercialFirstWeightKg,
+        firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
+        secondWeightKg: finalData.gvw
+      });
+    }
+
+    // Commercial: only the visit that actually had a first weight to compare against
+    // (i.e. produced a real net-weight result) finalizes the physical-weighing record.
+    // A lone first-visit reading stays open (is_final=0) so the vehicle's return visit
+    // can resume it via LocalWeighingStore.listOpenByPlate - enforcement has no
+    // equivalent reweigh loop in this pass, so it always finalizes here as before.
+    const isFinal = mode === 'commercial' ? provisionalResult != null : true;
+
+    // Same local-only rule as sendAutoweigh: commercial never posts to this
+    // enforcement-shaped endpoint - see that method's comment for why.
+    const stationReady = Boolean(this.config.enabled && this.config.baseUrl && this.config.stationId);
+    const syncStatus = mode === 'commercial' ? 'local_only' : stationReady ? 'queued' : 'awaiting_station_resolution';
+    LocalWeighingStore.upsert({
+      localId: localSessionId,
+      mode,
+      vehicleRegNumber,
+      axleConfigurationId,
+      weighingType: this.currentSession.weighingType || finalData.weighingType || null,
+      axleReadings: finalData.axles,
+      gvwMeasuredKg: finalData.gvw ?? null,
+      provisionalResult,
+      captureSource: 'frontend',
+      isFinal,
+      syncStatus
+    });
+
+    if (mode === 'commercial') {
+      console.log('[BackendClient] Commercial visit captured locally (preview only) - complete the real transaction through the commercial weighing screen once online');
+      this.eventBus.emitEvent('backend:complete-captured-locally', { localId: localSessionId, vehicleRegNumber, provisionalResult, mode });
+      this.resetSession();
+      return null;
+    }
+
+    if (!stationReady) {
+      console.log('[BackendClient] Session completion captured locally (awaiting station resolution or backend config) - will queue for sync once resolved');
+      this.eventBus.emitEvent('backend:complete-captured-locally', { localId: localSessionId, vehicleRegNumber, provisionalResult, mode });
+      this.resetSession();
+      return null;
+    }
 
     const payload = {
       stationId: this.config.stationId,
       bound: this.config.bound,
-      vehicleRegNumber: finalData.plateNumber || this.currentSession.vehicleRegNumber || 'UNKNOWN',
+      vehicleRegNumber,
       vehicleId: finalData.vehicleId || this.currentSession.vehicleId,
       axles: finalData.axles.map((axle, index) => ({
         axleNumber: axle.axleNumber || (index + 1),
         measuredWeightKg: axle.weight,
-        axleConfigurationId: finalData.axleConfigurationId || this.currentSession.axleConfigurationId
+        axleConfigurationId
       })),
       weighingMode: this.currentSession.weighingMode || 'mobile',
       capturedAt: new Date().toISOString(),
@@ -437,6 +605,8 @@ class BackendClient {
 
     if (result) {
       console.log(`[BackendClient] Session completed: TransactionId=${result.weighingId}, Status=${result.controlStatus}`);
+
+      LocalWeighingStore.markSyncStatus(localSessionId, 'synced', result.weighingId);
 
       this.eventBus.emitEvent('backend:session-completed', {
         transactionId: result.weighingId,
@@ -493,7 +663,11 @@ class BackendClient {
       weighingMode: null,
       isAutoweighSent: false,
       autoweighGvw: 0,
-      localSessionId: null
+      localSessionId: null,
+      commercialFirstWeightKg: null,
+      commercialFirstWeightType: null,
+      weighingType: null,
+      axleConfigurationCode: null
     };
   }
 
@@ -640,6 +814,10 @@ BackendClient.restartConnectivityPoll = function(intervalMs) {
 
 BackendClient.startSession = function(vehicleInfo) {
   return BackendClient.getInstance().startSession(vehicleInfo);
+};
+
+BackendClient.startCommercialSession = function(params) {
+  return BackendClient.getInstance().startCommercialSession(params);
 };
 
 BackendClient.sendAutoweigh = function(weighingData) {

@@ -24,6 +24,8 @@ const StateManager = require('../core/StateManager');
 
 const STATIONS_ENDPOINT = '/api/v1/Stations';
 const AXLE_CONFIG_ENDPOINT = '/api/v1/AxleConfiguration';
+const TOLERANCES_ENDPOINT = '/api/v1/acts/tolerances';
+const TOLERANCE_LEGAL_FRAMEWORKS = ['TRAFFIC_ACT', 'EAC'];
 const DEFAULT_PERIODIC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h - slow-moving reference data
 
 /**
@@ -155,12 +157,31 @@ class ConfigSyncService {
   }
 
   /**
-   * Fetch AxleConfiguration catalog from the backend and upsert into the local mirror table.
+   * Fetch AxleConfiguration catalog from the backend and upsert into the local mirror
+   * table, exploding each config's already-nested `weightReferences[]` (the list
+   * endpoint's repository eager-loads them - AxleConfigurationRepository.GetAllAsync,
+   * confirmed no second endpoint is needed) into backend_axle_weight_references.
    */
   async syncAxleConfigurations() {
     const configs = await this._authorizedGet(AXLE_CONFIG_ENDPOINT);
-    this._upsertBackendAxleConfigurations(Array.isArray(configs) ? configs : []);
+    const list = Array.isArray(configs) ? configs : [];
+    this._upsertBackendAxleConfigurations(list);
+    this._upsertBackendAxleWeightReferences(list);
     return configs;
+  }
+
+  /**
+   * Fetch ToleranceSetting rows (per legal framework) and upsert into the local mirror
+   * table. Required by ComplianceEngine.js for GVW/axle-group tolerance resolution.
+   */
+  async syncToleranceSettings() {
+    const all = [];
+    for (const framework of TOLERANCE_LEGAL_FRAMEWORKS) {
+      const rows = await this._authorizedGet(`${TOLERANCES_ENDPOINT}?legalFramework=${encodeURIComponent(framework)}`);
+      if (Array.isArray(rows)) all.push(...rows);
+    }
+    this._upsertBackendToleranceSettings(all);
+    return all;
   }
 
   _upsertBackendStations(stations) {
@@ -244,6 +265,85 @@ class ConfigSyncService {
   }
 
   /**
+   * Explode each axle configuration's nested `weightReferences[]` into
+   * backend_axle_weight_references. A config's full set of refs is replaced on every
+   * sync (delete-then-insert per config) so a ref removed on the backend doesn't
+   * linger locally - configs themselves are few and slow-moving, so this is cheap.
+   */
+  _upsertBackendAxleWeightReferences(configs) {
+    const db = this._db();
+    const now = new Date().toISOString();
+    const deleteForConfig = db.prepare('DELETE FROM backend_axle_weight_references WHERE axle_configuration_id = ?');
+    const insert = db.prepare(`
+      INSERT INTO backend_axle_weight_references
+        (id, axle_configuration_id, axle_position, axle_legal_weight_kg, axle_group_id, axle_grouping, is_active, raw_json, synced_at)
+      VALUES (@id, @axleConfigurationId, @axlePosition, @axleLegalWeightKg, @axleGroupId, @axleGrouping, @isActive, @rawJson, @syncedAt)
+    `);
+
+    let total = 0;
+    db.transaction(() => {
+      for (const c of configs) {
+        const configId = String(c.id);
+        deleteForConfig.run(configId);
+        const refs = Array.isArray(c.weightReferences) ? c.weightReferences : [];
+        for (const r of refs) {
+          insert.run({
+            id: String(r.id),
+            axleConfigurationId: configId,
+            axlePosition: r.axlePosition || 0,
+            axleLegalWeightKg: r.axleLegalWeightKg || 0,
+            axleGroupId: r.axleGroupId ? String(r.axleGroupId) : null,
+            axleGrouping: r.axleGrouping || '',
+            isActive: r.isActive === false ? 0 : 1,
+            rawJson: JSON.stringify(r),
+            syncedAt: now
+          });
+          total++;
+        }
+      }
+    })();
+
+    console.log(`[ConfigSyncService] Synced ${total} axle weight reference(s) into backend_axle_weight_references`);
+  }
+
+  _upsertBackendToleranceSettings(settings) {
+    const db = this._db();
+    const now = new Date().toISOString();
+    const upsert = db.prepare(`
+      INSERT INTO backend_tolerance_settings
+        (id, code, legal_framework, tolerance_percentage, tolerance_kg, applies_to, is_active, raw_json, synced_at)
+      VALUES (@id, @code, @legalFramework, @tolerancePercentage, @toleranceKg, @appliesTo, @isActive, @rawJson, @syncedAt)
+      ON CONFLICT(id) DO UPDATE SET
+        code = excluded.code,
+        legal_framework = excluded.legal_framework,
+        tolerance_percentage = excluded.tolerance_percentage,
+        tolerance_kg = excluded.tolerance_kg,
+        applies_to = excluded.applies_to,
+        is_active = excluded.is_active,
+        raw_json = excluded.raw_json,
+        synced_at = excluded.synced_at
+    `);
+
+    db.transaction(() => {
+      for (const s of settings) {
+        upsert.run({
+          id: String(s.id),
+          code: s.code || '',
+          legalFramework: s.legalFramework || '',
+          tolerancePercentage: s.tolerancePercentage || 0,
+          toleranceKg: s.toleranceKg ?? null,
+          appliesTo: s.appliesTo || '',
+          isActive: s.isActive === false ? 0 : 1,
+          rawJson: JSON.stringify(s),
+          syncedAt: now
+        });
+      }
+    })();
+
+    console.log(`[ConfigSyncService] Synced ${settings.length} tolerance setting(s) into backend_tolerance_settings`);
+  }
+
+  /**
    * Resolve the local station.code to a backend station GUID from the local mirror
    * table (no network call) and push it into BackendClient.config.stationId directly
    * (bypassing BackendClient.configure(), which would needlessly clear the cached
@@ -306,6 +406,7 @@ class ConfigSyncService {
   async runSync() {
     let stationsCount = null;
     let axleConfigCount = null;
+    let toleranceSettingsCount = null;
     let error = null;
 
     try {
@@ -324,6 +425,14 @@ class ConfigSyncService {
       error = error || err.message;
     }
 
+    try {
+      const tolerances = await this.syncToleranceSettings();
+      toleranceSettingsCount = Array.isArray(tolerances) ? tolerances.length : 0;
+    } catch (err) {
+      console.warn('[ConfigSyncService] Tolerance settings fetch failed (using cached mirror if any):', err.message);
+      error = error || err.message;
+    }
+
     const stationGuid = this.resolveAndApplyStationId();
     const drift = this._computeStationDrift(stationGuid);
 
@@ -337,6 +446,7 @@ class ConfigSyncService {
       syncedAt: this.lastSyncedAt,
       stationsCount,
       axleConfigCount,
+      toleranceSettingsCount,
       stationId: stationGuid,
       drift,
       error
@@ -426,6 +536,7 @@ module.exports = {
   runSync: () => getInstance().runSync(),
   syncStations: () => getInstance().syncStations(),
   syncAxleConfigurations: () => getInstance().syncAxleConfigurations(),
+  syncToleranceSettings: () => getInstance().syncToleranceSettings(),
   resolveAndApplyStationId: () => getInstance().resolveAndApplyStationId(),
   applyBackendValues: () => getInstance().applyBackendValues(),
   getStatus: () => getInstance().getStatus(),
