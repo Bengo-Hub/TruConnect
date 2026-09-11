@@ -89,6 +89,18 @@ function upsert(fields) {
   return get(fields.localId);
 }
 
+/**
+ * Permanently abandon a pending local weighing (operator-initiated "Discard", mirroring
+ * truload-frontend's own Pending Transactions panel). Marks it dead_letter + final rather
+ * than hard-deleting, so a mistaken capture leaves an auditable trace instead of vanishing.
+ */
+function discard(localId) {
+  db()
+    .prepare('UPDATE local_weighings SET is_final = 1, sync_status = ?, updated_at = ? WHERE local_id = ?')
+    .run('dead_letter', new Date().toISOString(), localId);
+  return get(localId);
+}
+
 function markSyncStatus(localId, syncStatus, backendTransactionId) {
   db()
     .prepare(
@@ -182,6 +194,7 @@ function deserialize(row) {
 module.exports = {
   upsert,
   markSyncStatus,
+  discard,
   get,
   listPending,
   countPending,

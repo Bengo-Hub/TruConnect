@@ -212,6 +212,13 @@ class BackendClient {
     }, this._connectivityPollIntervalMs);
     if (this._connectivityPollTimer.unref) this._connectivityPollTimer.unref();
 
+    // setInterval's first tick doesn't fire until a full interval has elapsed - with the
+    // default 30s poll, that left the renderer's "Cloud" badge showing "checking..." for up
+    // to 30s after every (re)start, including right after Settings saves new credentials via
+    // restartConnectivityPoll(). Fire one immediately too so a just-configured/just-verified
+    // backend reflects in the badge right away, not on the next lucky tick.
+    this._pollConnection().catch(err => console.error('[BackendClient] Initial connectivity poll error:', err.message));
+
     console.log(`[BackendClient] Connectivity poll started (every ${this._connectivityPollIntervalMs}ms)`);
   }
 
@@ -232,10 +239,21 @@ class BackendClient {
 
   async _pollConnection() {
     if (!this.config.enabled || !this.config.baseUrl) return;
-
-    const wasOnline = this._lastKnownOnline;
     const isOnline = await this.checkConnection();
+    this._recordConnectionState(isOnline);
+  }
 
+  /**
+   * Diff the given reachability result against the last known state and emit
+   * backend:online/backend:offline ONLY on an actual transition. Shared by the periodic
+   * poll (_pollConnection) and every manual check (Settings "Test Connection",
+   * save-settings' inline verification) so the renderer's Cloud badge reflects a
+   * successful manual check immediately, not only on the next lucky poll tick.
+   *
+   * @param {boolean} isOnline
+   */
+  _recordConnectionState(isOnline) {
+    const wasOnline = this._lastKnownOnline;
     if (isOnline === wasOnline) return; // no state transition - stay quiet
 
     this._lastKnownOnline = isOnline;
@@ -798,6 +816,10 @@ BackendClient.authenticate = function() {
 
 BackendClient.checkConnection = function() {
   return BackendClient.getInstance().checkConnection();
+};
+
+BackendClient.recordConnectionState = function(isOnline) {
+  return BackendClient.getInstance()._recordConnectionState(isOnline);
 };
 
 BackendClient.startConnectivityPoll = function(intervalMs) {

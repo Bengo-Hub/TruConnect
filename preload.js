@@ -45,6 +45,7 @@ const validInvokeChannels = [
   'axle-config:list-local',
   'local-weighing:list-pending',
   'local-weighing:count-pending',
+  'local-weighing:discard',
   'commercial:find-open-weighing',
   'commercial:start-weighing',
   // System

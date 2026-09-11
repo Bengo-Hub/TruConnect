@@ -21,7 +21,14 @@
  *
  * Override any of these via environment variables if your demo backend/credentials
  * differ from the documented defaults:
- *   TRUCONNECT_DEMO_BASE_URL   (default: https://kuraweighapitest.masterspace.co.ke)
+ *   TRUCONNECT_DEMO_BASE_URL   (default: https://truloadapi.codevertexafrica.com - the
+ *                                real production ingress host, devops-k8s
+ *                                apps/truload-backend/values.yaml. NOT
+ *                                kuraweighapitest.masterspace.co.ke, a legacy pre-rebrand
+ *                                test-era hostname that truload-docs' own Swagger link
+ *                                still stales-references - that domain resolves to the
+ *                                raw cluster IP with no CDN in front of it, unlike every
+ *                                current codevertexafrica.com host.)
  *   TRUCONNECT_DEMO_EMAIL      (default: middleware-demo@truconnect.local)
  *   TRUCONNECT_DEMO_PASSWORD   (default: ChangeMe123! - truload-backend UserSeeder's
  *                                documented, non-secret demo/dev default)
@@ -34,7 +41,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const BASE_URL = process.env.TRUCONNECT_DEMO_BASE_URL || 'https://kuraweighapitest.masterspace.co.ke';
+const BASE_URL = process.env.TRUCONNECT_DEMO_BASE_URL || 'https://truloadapi.codevertexafrica.com';
 const EMAIL = process.env.TRUCONNECT_DEMO_EMAIL || 'middleware-demo@truconnect.local';
 const PASSWORD = process.env.TRUCONNECT_DEMO_PASSWORD || 'ChangeMe123!';
 const STATION_CODE = process.env.TRUCONNECT_DEMO_STATION_CODE || 'DEMO-WB-01';

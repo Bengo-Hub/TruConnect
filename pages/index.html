@@ -922,6 +922,111 @@
 
     /* ===== Offline capture UI (offline-weighing redesign, 2026-09) ===== */
 
+    /* Step indicator - adapted from truload-frontend's commercial/enforcement capture
+       wizard (Capture -> Vehicle -> Decision), re-labelled for what TruConnect itself
+       actually does (Setup & Capture -> Review -> Complete). Shown as progress, not a
+       hide/show wizard - the live weight readout needs to stay visible throughout. */
+    .step-indicator {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 20px;
+      padding: 4px 0;
+    }
+    .step-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 0 0 auto;
+      width: 160px;
+    }
+    .step-circle {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--text-secondary);
+      background: var(--card-bg);
+      transition: all 0.2s ease;
+    }
+    .step-title {
+      margin-top: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+    .step-subtitle {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      opacity: 0.75;
+      text-align: center;
+    }
+    .step-connector {
+      flex: 1 1 auto;
+      height: 2px;
+      background: var(--border);
+      margin-top: 17px;
+      min-width: 30px;
+    }
+    .step-item.active .step-circle { border-color: var(--primary); color: var(--primary); }
+    .step-item.active .step-title { color: var(--text); }
+    .step-item.done .step-circle { border-color: var(--success); background: var(--success); color: #000; }
+    .step-item.done .step-title { color: var(--text); }
+    .step-item.done .step-circle::before { content: '\2713'; }
+
+    /* Pending Transactions panel - adapted from truload-frontend's own "Pending
+       Transactions" list (resumable, incomplete captures), shown inline in the setup
+       card rather than only behind the topbar badge. */
+    .pending-tx-panel {
+      display: none;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      background: rgba(255, 193, 7, 0.06);
+      padding: 14px 16px;
+      margin-bottom: 15px;
+    }
+    .pending-tx-panel.visible { display: block; }
+    .pending-tx-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--warning);
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+    }
+    .pending-tx-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      margin-bottom: 6px;
+    }
+    .pending-tx-row:last-child { margin-bottom: 0; }
+    .pending-tx-info { font-size: 0.82rem; }
+    .pending-tx-plate { font-weight: 600; color: var(--text); }
+    .pending-tx-meta { color: var(--text-secondary); font-size: 0.75rem; margin-top: 2px; }
+    .pending-tx-actions { display: flex; gap: 6px; }
+    .pending-tx-actions button {
+      padding: 5px 10px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .pending-tx-actions button.resume { border-color: var(--primary); color: var(--primary); }
+    .pending-tx-actions button.discard { border-color: rgba(244, 67, 54, 0.4); color: var(--danger); }
+
     .cloud-badge {
       display: flex;
       align-items: center;
@@ -1186,7 +1291,7 @@
       <img src="../assets/img/logo.png" alt="TruConnect Logo" class="logo" onerror="this.style.display='none'">
       <div class="app-title">
         <h1>TruConnect</h1>
-        <span class="version">v2.0.0</span>
+        <span class="version" id="app-version">v...</span>
       </div>
     </div>
 
@@ -1362,9 +1467,38 @@
 
       <!-- Multideck View -->
       <div class="view-container" id="multideck-view">
+        <!-- Step indicator (offline-weighing redesign, 2026-09) - adapted from
+             truload-frontend's own Capture/Vehicle/Decision wizard -->
+        <div class="step-indicator" id="multideck-step-indicator">
+          <div class="step-item active" id="multideck-step-1">
+            <div class="step-circle">1</div>
+            <div class="step-title">Setup &amp; Capture</div>
+            <div class="step-subtitle">Vehicle, axle config, weights</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="multideck-step-2">
+            <div class="step-circle">2</div>
+            <div class="step-title">Review</div>
+            <div class="step-subtitle">Provisional result</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="multideck-step-3">
+            <div class="step-circle">3</div>
+            <div class="step-title">Complete</div>
+            <div class="step-subtitle">Finalize &amp; sync</div>
+          </div>
+        </div>
+
         <!-- Weighing Setup (offline-weighing redesign, 2026-09) -->
         <div class="setup-card" id="multideck-setup-card">
           <h3><i class="fas fa-truck"></i> Weighing Setup</h3>
+
+          <!-- Pending Transactions - adapted from truload-frontend's own panel -->
+          <div class="pending-tx-panel" id="multideck-pending-tx-panel">
+            <div class="pending-tx-header"><i class="fas fa-clock"></i> <span id="multideck-pending-tx-title">Pending Transactions</span></div>
+            <div id="multideck-pending-tx-list"></div>
+          </div>
+
           <div class="setup-mode-toggle">
             <button type="button" class="mode-btn active" data-mode="enforcement" id="multideck-mode-enforcement">Enforcement</button>
             <button type="button" class="mode-btn" data-mode="commercial" id="multideck-mode-commercial">Commercial</button>
@@ -1502,9 +1636,38 @@
 
       <!-- Mobile Scale View -->
       <div class="view-container active" id="mobile-view">
+        <!-- Step indicator (offline-weighing redesign, 2026-09) - adapted from
+             truload-frontend's own Capture/Vehicle/Decision wizard -->
+        <div class="step-indicator" id="mobile-step-indicator">
+          <div class="step-item active" id="mobile-step-1">
+            <div class="step-circle">1</div>
+            <div class="step-title">Setup &amp; Capture</div>
+            <div class="step-subtitle">Vehicle, axle config, weights</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="mobile-step-2">
+            <div class="step-circle">2</div>
+            <div class="step-title">Review</div>
+            <div class="step-subtitle">Provisional result</div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" id="mobile-step-3">
+            <div class="step-circle">3</div>
+            <div class="step-title">Complete</div>
+            <div class="step-subtitle">Finalize &amp; sync</div>
+          </div>
+        </div>
+
         <!-- Weighing Setup (offline-weighing redesign, 2026-09) -->
         <div class="setup-card" id="mobile-setup-card">
           <h3><i class="fas fa-truck"></i> Weighing Setup</h3>
+
+          <!-- Pending Transactions - adapted from truload-frontend's own panel -->
+          <div class="pending-tx-panel" id="mobile-pending-tx-panel">
+            <div class="pending-tx-header"><i class="fas fa-clock"></i> <span id="mobile-pending-tx-title">Pending Transactions</span></div>
+            <div id="mobile-pending-tx-list"></div>
+          </div>
+
           <div class="setup-mode-toggle">
             <button type="button" class="mode-btn active" data-mode="enforcement" id="mobile-mode-enforcement">Enforcement</button>
             <button type="button" class="mode-btn" data-mode="commercial" id="mobile-mode-commercial">Commercial</button>
@@ -1691,6 +1854,7 @@
       elements.navLogin = getEl('nav-login');
       elements.navLogout = getEl('nav-logout');
       elements.navSectionSystem = getEl('nav-section-system');
+      elements.appVersion = getEl('app-version');
       elements.sidebar = getEl('sidebar');
       elements.sidebarOverlay = getEl('sidebar-overlay');
       elements.menuToggle = getEl('menu-toggle');
@@ -1773,6 +1937,12 @@
         elements[`${prefix}ResultStatus`] = getEl(`${prefix}-result-status`);
         elements[`${prefix}ResultTag`] = getEl(`${prefix}-result-tag`);
         elements[`${prefix}ResultBody`] = getEl(`${prefix}-result-body`);
+        elements[`${prefix}Step1`] = getEl(`${prefix}-step-1`);
+        elements[`${prefix}Step2`] = getEl(`${prefix}-step-2`);
+        elements[`${prefix}Step3`] = getEl(`${prefix}-step-3`);
+        elements[`${prefix}PendingTxPanel`] = getEl(`${prefix}-pending-tx-panel`);
+        elements[`${prefix}PendingTxTitle`] = getEl(`${prefix}-pending-tx-title`);
+        elements[`${prefix}PendingTxList`] = getEl(`${prefix}-pending-tx-list`);
       });
 
       // Count found elements
@@ -2215,8 +2385,76 @@
         resultPanel: elements[`${prefix}ResultPanel`],
         resultStatus: elements[`${prefix}ResultStatus`],
         resultTag: elements[`${prefix}ResultTag`],
-        resultBody: elements[`${prefix}ResultBody`]
+        resultBody: elements[`${prefix}ResultBody`],
+        step1: elements[`${prefix}Step1`],
+        step2: elements[`${prefix}Step2`],
+        step3: elements[`${prefix}Step3`],
+        pendingTxPanel: elements[`${prefix}PendingTxPanel`],
+        pendingTxTitle: elements[`${prefix}PendingTxTitle`],
+        pendingTxList: elements[`${prefix}PendingTxList`]
       };
+    }
+
+    // Update the 1/2/3 step progress indicator - adapted from truload-frontend's own
+    // Capture/Vehicle/Decision wizard, shown as progress rather than hiding sections
+    // (the live weight readout has to stay visible regardless of "step").
+    function updateStepIndicator(prefix, step) {
+      const els = setupPrefixElements(prefix);
+      [[1, els.step1], [2, els.step2], [3, els.step3]].forEach(([n, el]) => {
+        if (!el) return;
+        el.classList.remove('active', 'done');
+        if (n < step) el.classList.add('done');
+        else if (n === step) el.classList.add('active');
+      });
+    }
+
+    // Populate the inline "Pending Transactions" panel (adapted from truload-frontend's
+    // own panel) with every locally-pending capture for this view's current mode, each
+    // with Resume/Discard actions - replaces having to dig into the topbar badge to see
+    // what's waiting.
+    async function refreshPendingTransactionsPanel(prefix) {
+      const els = setupPrefixElements(prefix);
+      if (!els.pendingTxPanel || !api.listPendingLocalWeighings) return;
+      try {
+        const res = await api.listPendingLocalWeighings(25);
+        const mode = weighingSetup[prefix].captureMode;
+        const items = ((res && res.weighings) || []).filter((w) => w.mode === mode && !w.isFinal);
+        if (items.length === 0) {
+          els.pendingTxPanel.classList.remove('visible');
+          return;
+        }
+        els.pendingTxTitle.textContent = `Pending Transactions (${items.length})`;
+        els.pendingTxPanel.classList.add('visible');
+        els.pendingTxList.innerHTML = items.map((w) => `
+          <div class="pending-tx-row">
+            <div class="pending-tx-info">
+              <div class="pending-tx-plate">${w.vehicleRegNumber}</div>
+              <div class="pending-tx-meta">${(w.gvwMeasuredKg || 0).toLocaleString()} kg &middot; ${new Date(w.capturedAt).toLocaleTimeString()}</div>
+            </div>
+            <div class="pending-tx-actions">
+              <button type="button" class="discard" data-local-id="${w.localId}" data-action="discard">Discard</button>
+              <button type="button" class="resume" data-local-id="${w.localId}" data-plate="${w.vehicleRegNumber}" data-action="resume">Resume</button>
+            </div>
+          </div>`).join('');
+
+        els.pendingTxList.querySelectorAll('button[data-action="resume"]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            els.plateInput.value = btn.dataset.plate;
+            checkForResumableWeighing(prefix);
+          });
+        });
+        els.pendingTxList.querySelectorAll('button[data-action="discard"]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (api.invoke) {
+              try { await api.invoke('local-weighing:discard', { localId: btn.dataset.localId }); } catch (error) { console.warn('Error discarding pending weighing:', error); }
+            }
+            refreshPendingTransactionsPanel(prefix);
+            refreshPendingBadge();
+          });
+        });
+      } catch (error) {
+        console.warn('Error loading pending transactions panel:', error);
+      }
     }
 
     // Populate both views' axle-config pickers from the LOCAL mirror
@@ -2253,6 +2491,7 @@
       if (els.weighingTypeField) els.weighingTypeField.classList.toggle('hidden', mode !== 'commercial');
       if (els.resumeBanner) els.resumeBanner.classList.remove('visible');
       s.resumeCandidate = null;
+      refreshPendingTransactionsPanel(prefix);
     }
 
     // Commercial only: does the typed plate already have an unfinished LOCAL first-
@@ -2396,6 +2635,9 @@
         if (elements.btnCaptureAxle) elements.btnCaptureAxle.disabled = true;
         if (elements.btnMobileComplete) elements.btnMobileComplete.disabled = true;
       }
+
+      updateStepIndicator(prefix, 1);
+      refreshPendingTransactionsPanel(prefix);
     }
 
     function resetResultPanel(prefix) {
@@ -2415,6 +2657,9 @@
       const result = localWeighing.provisionalResult;
       const isOffline = ['queued', 'awaiting_station_resolution', 'local_only'].includes(localWeighing.syncStatus);
       els.resultTag.textContent = isOffline ? 'Provisional - offline' : 'Provisional';
+
+      // Step indicator: 2 "Review" once any result exists, 3 "Complete" once finalized.
+      updateStepIndicator(prefix, localWeighing.isFinal ? 3 : 2);
 
       if (!result) {
         els.resultPanel.className = 'result-panel status-pending visible';
@@ -3150,13 +3395,33 @@
         });
       }
 
+      // The sidebar previously shipped a hardcoded "v2.0.0" that never reflected the
+      // actually-installed/running version, despite an app:get-version IPC channel
+      // already existing and being used elsewhere (the updater) - just never called here.
+      if (api.getVersion && elements.appVersion) {
+        try {
+          const versionInfo = await api.getVersion();
+          if (versionInfo && versionInfo.version) {
+            elements.appVersion.textContent = `v${versionInfo.version}`;
+          }
+        } catch (error) {
+          console.warn('Error loading app version:', error);
+        }
+      }
+
       await loadLocalAxleConfigs();
       await refreshPendingBadge();
+      await refreshPendingTransactionsPanel('mobile');
+      await refreshPendingTransactionsPanel('multideck');
       // Reference data (axle configs/tolerances) and the pending queue both change
       // slowly relative to a capture session - a light periodic refresh is enough to
       // keep the picker and badge honest without polling aggressively.
       setInterval(loadLocalAxleConfigs, 5 * 60 * 1000);
       setInterval(refreshPendingBadge, 30 * 1000);
+      setInterval(() => {
+        refreshPendingTransactionsPanel('mobile');
+        refreshPendingTransactionsPanel('multideck');
+      }, 30 * 1000);
 
       // Get initial data and settings
       try {

@@ -465,13 +465,24 @@ module.exports = {
 
   // TruLoad Backend Configuration
   // Connection settings for TruLoad backend API
+  //
+  // baseUrl now defaults to the real production ingress (devops-k8s apps/truload-backend/
+  // values.yaml) rather than localhost:4000 - a fresh install pointed at localhost could
+  // never reach anything real, silently defeating "just enter credentials and go." email/
+  // password are deliberately left BLANK rather than defaulting to middleware@truconnect.local
+  // (found live, 2026-09-11: that is the LIVE KURA PRODUCTION service account, not a safe/
+  // generic placeholder - a brand-new install would silently attempt real production
+  // credentials before any operator configured anything, which is both confusing for
+  // anyone who isn't actually KURA and a real smell to bake a live account's identity into
+  // a distributable installer's defaults). Use Settings > Backend > "Populate Demo Values"
+  // for a working demo account, or enter a site's real credentials directly.
   backend: {
     enabled: false,                          // Enable backend integration
-    baseUrl: 'http://localhost:4000',        // Backend API URL (dev default)
+    baseUrl: 'https://truloadapi.codevertexafrica.com', // Backend API URL (production default)
     authEndpoint: '/api/v1/auth/login',      // Authentication endpoint
     autoweighEndpoint: '/api/v1/weighing-transactions/autoweigh', // Autoweigh submission endpoint
-    email: 'middleware@truconnect.local',     // Service account email (seeded in backend)
-    password: 'ChangeMe123!',                // Service account password (CHANGE IN PRODUCTION)
+    email: '',                               // Service account email - must be explicitly configured
+    password: '',                            // Service account password - must be explicitly configured
     timeout: 30000,                          // Request timeout in ms
     retryCount: 3,                           // Number of retries on failure
     retryDelay: 1000                         // Delay between retries in ms
@@ -511,9 +522,9 @@ module.exports = {
     isDemoTenant: false,                     // When true, this device is intentionally targeting the
                                               // shared platform-wide codevertex-demo tenant for
                                               // practice/training weighings - one of FOUR outlet-scoped
-                                              // demo orgs/stations (TRULOAD-DEMO/DEMO-WB-01 generic,
-                                              // TRULOAD-DEMO-QUARRY/QUARRY-WB-01, TRULOAD-DEMO-WASTE/
-                                              // WASTE-WB-01, TRULOAD-DEMO-ENF/ENF-WB-01 enforcement -
+                                              // demo orgs/stations (CODEVERTEX-DEMO/DEMO-WB-01 generic,
+                                              // CODEVERTEX-DEMO-QUARRY/QUARRY-WB-01, CODEVERTEX-DEMO-WASTE/
+                                              // WASTE-WB-01, CODEVERTEX-DEMO-ENF/ENF-WB-01 enforcement -
                                               // see truload-backend's AuthDemoSyncService.cs
                                               // OutletOrgMap for the full set), not a single outlet.
                                               // Required (together with simulation.enabled + backend.enabled)

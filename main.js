@@ -1018,6 +1018,9 @@ ipcMain.handle('save-settings', async (event, settings) => {
       if (settings.backend.enabled && settings.backend.baseUrl) {
         BackendClient.checkConnection().then(connected => {
           console.log(`[Settings] Backend connection: ${connected ? 'OK' : 'Failed'}`);
+          // Same badge-freshness fix as test-backend-connection - without this, only the
+          // periodic poll (up to 30s later) ever updated the topbar Cloud badge.
+          BackendClient.recordConnectionState(connected);
         }).catch(err => {
           console.error('[Settings] Backend connection check error:', err.message);
         });
@@ -1066,6 +1069,10 @@ ipcMain.handle('test-backend-connection', async (event, config) => {
 
     // Try to authenticate
     const authenticated = await client.authenticate();
+    // Reflect a successful/failed manual test in the topbar Cloud badge immediately,
+    // rather than leaving the operator staring at "checking..." until the next
+    // 30s poll tick happens to run (offline-weighing redesign, 2026-09).
+    BackendClient.recordConnectionState(authenticated);
     if (authenticated) {
       return { success: true };
     } else {
@@ -1566,6 +1573,20 @@ ipcMain.handle('local-weighing:count-pending', async () => {
   } catch (error) {
     console.error('Error counting pending local weighings:', error);
     return { success: false, error: error.message, count: 0 };
+  }
+});
+
+// Permanently abandon a pending local capture (Pending Transactions panel's Discard
+// action, mirroring truload-frontend's own panel).
+ipcMain.handle('local-weighing:discard', async (event, { localId } = {}) => {
+  try {
+    if (!localId) return { success: false, error: 'localId is required' };
+    const LocalWeighingStore = require('./src/backend/LocalWeighingStore');
+    const weighing = LocalWeighingStore.discard(localId);
+    return { success: true, weighing };
+  } catch (error) {
+    console.error('Error discarding local weighing:', error);
+    return { success: false, error: error.message };
   }
 });
 
