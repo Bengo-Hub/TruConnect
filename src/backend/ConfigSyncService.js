@@ -281,6 +281,11 @@ class ConfigSyncService {
     `);
 
     let total = 0;
+    // NOTE: the Database wrapper's .transaction(fn) already invokes fn internally
+    // (DatabaseManager.transaction, Database.js) - unlike raw better-sqlite3, this
+    // must NOT be called with a trailing () or it throws "is not a function" (caught
+    // by tests/local-weighing-and-db-integration-test.js - matches the sibling
+    // _upsertBackendStations/_upsertBackendAxleConfigurations methods' own usage).
     db.transaction(() => {
       for (const c of configs) {
         const configId = String(c.id);
@@ -301,7 +306,7 @@ class ConfigSyncService {
           total++;
         }
       }
-    })();
+    });
 
     console.log(`[ConfigSyncService] Synced ${total} axle weight reference(s) into backend_axle_weight_references`);
   }
@@ -324,6 +329,7 @@ class ConfigSyncService {
         synced_at = excluded.synced_at
     `);
 
+    // See the note in _upsertBackendAxleWeightReferences above - no trailing () here.
     db.transaction(() => {
       for (const s of settings) {
         upsert.run({
@@ -338,7 +344,7 @@ class ConfigSyncService {
           syncedAt: now
         });
       }
-    })();
+    });
 
     console.log(`[ConfigSyncService] Synced ${settings.length} tolerance setting(s) into backend_tolerance_settings`);
   }
