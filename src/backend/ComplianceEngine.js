@@ -163,9 +163,10 @@ function computeProvisionalCompliance(input) {
  * weight references haven't been synced locally yet.
  *
  * @param {import('better-sqlite3').Database} db
- * @param {{axleConfigurationId: string, axles: {axleNumber:number, measuredWeightKg:number}[]}} params
+ * @param {{axleConfigurationId: string, axles: {axleNumber:number, measuredWeightKg:number}[],
+ *   legalFrameworkOverride?: string|null}} params
  */
-function computeOfflineComplianceFromDb(db, { axleConfigurationId, axles }) {
+function computeOfflineComplianceFromDb(db, { axleConfigurationId, axles, legalFrameworkOverride }) {
   const config = db.prepare('SELECT * FROM backend_axle_configurations WHERE id = ?').get(axleConfigurationId);
   if (!config) return null;
 
@@ -175,7 +176,12 @@ function computeOfflineComplianceFromDb(db, { axleConfigurationId, axles }) {
   if (!weightRefs.length) return null;
 
   const rawConfig = JSON.parse(config.raw_json);
-  const legalFramework = rawConfig.legalFramework || 'TRAFFIC_ACT';
+  // Enforcement (no override) resolves the framework from the axle config's OWN tag, as
+  // before. Commercial pre-compliance passes the ORG's selected framework explicitly
+  // instead - mirrors truload-backend's WeighingService.CalculateComplianceAsync, which
+  // resolves legalFramework from Organization.SelectedLegalFramework for a commercial
+  // transaction rather than the config's own tag or the enforcement-wide default act.
+  const legalFramework = legalFrameworkOverride || rawConfig.legalFramework || 'TRAFFIC_ACT';
 
   const toleranceRows = db
     .prepare('SELECT * FROM backend_tolerance_settings WHERE is_active = 1')

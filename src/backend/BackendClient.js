@@ -299,6 +299,11 @@ class BackendClient {
       // startCommercialSession / computeCommercialCaptureResult).
       commercialFirstWeightKg: vehicleInfo.commercialFirstWeightKg ?? null,
       commercialFirstWeightType: vehicleInfo.commercialFirstWeightType || null,
+      // Commercial only, non-null exactly when this visit is a real N-axle pre-compliance
+      // capture (main.js's commercial:start-weighing already gated this on the org having
+      // opted into a framework AND a real multi-axle config being selected) - resolved once
+      // at session start and carried through a resume, same pattern as the two fields above.
+      commercialLegalFramework: vehicleInfo.commercialLegalFramework || null,
       // Commercial only: which side of the pair THIS visit's single reading represents.
       weighingType: vehicleInfo.weighingType || null,
       axleConfigurationCode: vehicleInfo.axleConfigurationCode || null
@@ -316,9 +321,10 @@ class BackendClient {
    * with zero new capture primitives.
    *
    * @param {{plateNumber:string, axleConfigurationId?:string, axleConfigurationCode?:string,
-   *   weighingType:'tare'|'gross', resume?: {localId:string, firstWeightKg:number, firstWeightType:string}}} params
+   *   weighingType:'tare'|'gross', resume?: {localId:string, firstWeightKg:number, firstWeightType:string},
+   *   commercialLegalFramework?: string|null}} params
    */
-  startCommercialSession({ plateNumber, axleConfigurationId, axleConfigurationCode, weighingType, resume }) {
+  startCommercialSession({ plateNumber, axleConfigurationId, axleConfigurationCode, weighingType, resume, commercialLegalFramework }) {
     this.startSession({
       regNumber: plateNumber,
       axleConfigurationId: axleConfigurationId || null,
@@ -327,7 +333,8 @@ class BackendClient {
       weighingType: weighingType || 'gross',
       localSessionId: resume ? resume.localId : undefined,
       commercialFirstWeightKg: resume ? resume.firstWeightKg : null,
-      commercialFirstWeightType: resume ? resume.firstWeightType : null
+      commercialFirstWeightType: resume ? resume.firstWeightType : null,
+      commercialLegalFramework: commercialLegalFramework || null
     });
     return this.getSession();
   }
@@ -355,6 +362,69 @@ class BackendClient {
       reason: 'simulation-active-without-demo-tenant'
     });
     return true;
+  }
+
+  /**
+   * Commercial local preview, shared by sendAutoweigh/completeSession. Two distinct
+   * shapes, never both as the primary result (2026-09-12, closes the offline-weighing
+   * redesign's deferred N-axle item):
+   *  - N-axle pre-compliance: when this.currentSession.commercialLegalFramework is set
+   *    (main.js's commercial:start-weighing already gated this on the org having opted
+   *    into a framework AND a real multi-axle config being captured), run the SAME
+   *    compliance engine enforcement uses over this visit's own axle readings. If a prior
+   *    first weight exists (this is the paired/finalizing visit), the tare/gross/net
+   *    figures are still computed and attached as `netInfo` so the operator doesn't lose
+   *    that number - just no longer the PRIMARY result.
+   *  - Legacy: a single lump reading, tare/gross/net math only once a first weight
+   *    exists to pair against (unchanged from before this change).
+   *
+   * @param {{axleConfigurationId: string|null, axles: {axleNumber?:number, weight:number}[], gvw: number}} params
+   * @returns {object|null}
+   */
+  _computeCommercialProvisionalResult({ axleConfigurationId, axles, gvw }) {
+    const ComplianceEngine = require('./ComplianceEngine');
+    const isNAxle = Boolean(this.currentSession.commercialLegalFramework) && axleConfigurationId && Array.isArray(axles) && axles.length > 1;
+
+    if (isNAxle) {
+      let complianceResult = null;
+      try {
+        complianceResult = ComplianceEngine.computeOfflineComplianceFromDb(require('../database/Database').getDb(), {
+          axleConfigurationId,
+          axles: axles.map((axle, index) => ({ axleNumber: axle.axleNumber || (index + 1), measuredWeightKg: axle.weight })),
+          legalFrameworkOverride: this.currentSession.commercialLegalFramework
+        });
+      } catch (err) {
+        console.warn('[BackendClient] Local commercial pre-compliance computation failed (will still capture the raw reading):', err.message);
+      }
+      if (!complianceResult) return null;
+      const netInfo = this.currentSession.commercialFirstWeightKg != null
+        ? ComplianceEngine.computeCommercialCaptureResult({
+            firstWeightKg: this.currentSession.commercialFirstWeightKg,
+            firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
+            secondWeightKg: gvw
+          })
+        : null;
+      return { ...complianceResult, netInfo };
+    }
+
+    if (this.currentSession.commercialFirstWeightKg != null) {
+      return ComplianceEngine.computeCommercialCaptureResult({
+        firstWeightKg: this.currentSession.commercialFirstWeightKg,
+        firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
+        secondWeightKg: gvw
+      });
+    }
+
+    return null;
+  }
+
+  /** True when a commercial provisional result carries a real net-weight pairing (flat
+   * legacy shape, or nested under `.netInfo` for the N-axle shape) - i.e. this visit
+   * actually finalizes the physical weighing rather than leaving it open for a resume. */
+  _commercialResultHasNetWeight(result) {
+    if (!result) return false;
+    if ('netWeightKg' in result) return true;
+    return Boolean(result.netInfo && 'netWeightKg' in result.netInfo);
   }
 
   /**
@@ -399,15 +469,16 @@ class BackendClient {
       } catch (err) {
         console.warn('[BackendClient] Local compliance computation failed (will still capture the raw reading):', err.message);
       }
-    } else if (mode === 'commercial' && this.currentSession.commercialFirstWeightKg != null) {
-      // A resumed second-visit reading (see startCommercialSession) - preview the net
-      // weight as soon as this visit's reading stabilizes, even before "Complete
-      // Weighing" is clicked. toleranceExceeded stays unresolvable offline by design.
-      const ComplianceEngine = require('./ComplianceEngine');
-      provisionalResult = ComplianceEngine.computeCommercialCaptureResult({
-        firstWeightKg: this.currentSession.commercialFirstWeightKg,
-        firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
-        secondWeightKg: weighingData.gvw
+    } else if (mode === 'commercial') {
+      // Resumed second-visit preview (net weight) as soon as this visit's reading
+      // stabilizes, even before "Complete Weighing" is clicked - OR, when this org has
+      // opted into N-axle pre-compliance (see _computeCommercialProvisionalResult), the
+      // compliance verdict for THIS visit's own axle distribution. Either way this fires
+      // per captured reading, same timing as the enforcement branch above.
+      provisionalResult = this._computeCommercialProvisionalResult({
+        axleConfigurationId,
+        axles: weighingData.axles,
+        gvw: weighingData.gvw
       });
     }
 
@@ -542,21 +613,23 @@ class BackendClient {
       } catch (err) {
         console.warn('[BackendClient] Local compliance computation failed (will still capture the raw reading):', err.message);
       }
-    } else if (mode === 'commercial' && this.currentSession.commercialFirstWeightKg != null) {
-      const ComplianceEngine = require('./ComplianceEngine');
-      provisionalResult = ComplianceEngine.computeCommercialCaptureResult({
-        firstWeightKg: this.currentSession.commercialFirstWeightKg,
-        firstWeightType: this.currentSession.commercialFirstWeightType || 'gross',
-        secondWeightKg: finalData.gvw
+    } else if (mode === 'commercial') {
+      provisionalResult = this._computeCommercialProvisionalResult({
+        axleConfigurationId,
+        axles: finalData.axles,
+        gvw: finalData.gvw
       });
     }
 
-    // Commercial: only the visit that actually had a first weight to compare against
-    // (i.e. produced a real net-weight result) finalizes the physical-weighing record.
-    // A lone first-visit reading stays open (is_final=0) so the vehicle's return visit
-    // can resume it via LocalWeighingStore.listOpenByPlate - enforcement has no
-    // equivalent reweigh loop in this pass, so it always finalizes here as before.
-    const isFinal = mode === 'commercial' ? provisionalResult != null : true;
+    // Commercial: only the visit that actually produced a real net-weight result (paired
+    // against a prior first weight) finalizes the physical-weighing record - whether that
+    // result is the legacy flat tare/gross/net shape or the N-axle compliance shape's
+    // nested `netInfo` (see _computeCommercialProvisionalResult). A lone first-visit
+    // reading (no net weight yet, even if it DID get a compliance verdict under the
+    // N-axle path) stays open (is_final=0) so the vehicle's return visit can resume it via
+    // LocalWeighingStore.listOpenByPlate - enforcement has no equivalent reweigh loop in
+    // this pass, so it always finalizes here as before.
+    const isFinal = mode === 'commercial' ? this._commercialResultHasNetWeight(provisionalResult) : true;
 
     // Same local-only rule as sendAutoweigh: commercial never posts to this
     // enforcement-shaped endpoint - see that method's comment for why.
@@ -684,6 +757,7 @@ class BackendClient {
       localSessionId: null,
       commercialFirstWeightKg: null,
       commercialFirstWeightType: null,
+      commercialLegalFramework: null,
       weighingType: null,
       axleConfigurationCode: null
     };

@@ -70,6 +70,7 @@ async function main() {
       organizationId: 'org-1', organizationName: 'Demo Org', supportsBidirectional: false,
       boundACode: 'A', boundBCode: 'B', isActive: true }
   ];
+  const AXLE_CONFIG_ID_DERIVED = '22222222-2222-2222-2222-222222222222';
   const fakeAxleConfigs = [
     {
       id: AXLE_CONFIG_ID, axleCode: '3A', axleName: 'Tridem 3-axle', axleNumber: 3,
@@ -80,6 +81,15 @@ async function main() {
         { id: 'wr-2', axlePosition: 2, axleLegalWeightKg: 9000, axleGroupId: null, axleGrouping: 'B', isActive: true },
         { id: 'wr-3', axlePosition: 3, axleLegalWeightKg: 9000, axleGroupId: null, axleGrouping: 'B', isActive: true }
       ]
+    },
+    // Non-standard/derived, fewer axles, alphabetically-earlier code - deliberately
+    // constructed so the OLD ordering (axle_number, axle_code) would list this BEFORE
+    // the standard 3A above, and the NEW ordering (is_standard DESC, ...) must not
+    // (2026-09-12 fix: standard configs list first regardless of axle count).
+    {
+      id: AXLE_CONFIG_ID_DERIVED, axleCode: '2X-CUSTOM', axleName: 'Derived 2-axle', axleNumber: 2,
+      gvwPermissibleKg: 18000, isStandard: false, isActive: true,
+      legalFramework: 'TRAFFIC_ACT', toleranceKg: null, weightReferences: []
     }
   ];
   const fakeTolerances = [
@@ -110,12 +120,12 @@ async function main() {
   const syncSummary = await ConfigSyncService.runSync();
   assert(syncSummary.success, `runSync() reports success (error=${syncSummary.error})`);
   assert(syncSummary.stationsCount === 1, `synced 1 station (got ${syncSummary.stationsCount})`);
-  assert(syncSummary.axleConfigCount === 1, `synced 1 axle config (got ${syncSummary.axleConfigCount})`);
+  assert(syncSummary.axleConfigCount === 2, `synced 2 axle configs (got ${syncSummary.axleConfigCount})`);
   assert(syncSummary.toleranceSettingsCount >= 2, `synced tolerance settings (got ${syncSummary.toleranceSettingsCount})`);
 
   const syncedStatus = ConfigSyncService.getStatus();
   assert(syncedStatus.selectedLegalFramework === 'TRAFFIC_ACT', `org's selected legal framework cached locally (got ${syncedStatus.selectedLegalFramework})`);
-  assert(syncedStatus.axleConfigCount === 1, `getStatus() reports axle config count from the SQLite mirror, not lastSyncedAt (got ${syncedStatus.axleConfigCount})`);
+  assert(syncedStatus.axleConfigCount === 2, `getStatus() reports axle config count from the SQLite mirror, not lastSyncedAt (got ${syncedStatus.axleConfigCount})`);
   assert(syncedStatus.stationId === STATION_ID, `getStatus() reports the resolved station id (got ${syncedStatus.stationId})`);
 
   const db = Database.getDb();
@@ -125,6 +135,17 @@ async function main() {
 
   const toleranceRows = db.all('SELECT * FROM backend_tolerance_settings');
   assert(toleranceRows.length >= 4, `tolerance settings persisted (got ${toleranceRows.length})`);
+
+  // Standard-axle-first ordering (2026-09-12 fix): mirrors the exact ORDER BY main.js's
+  // axle-config:list-local now uses. The 3-axle STANDARD config must list before the
+  // 2-axle non-standard one, even though a plain axle_number/axle_code sort would have
+  // put the 2-axle one first.
+  const orderedConfigs = db.all(
+    'SELECT id, axle_code, is_standard FROM backend_axle_configurations WHERE is_active = 1 ORDER BY is_standard DESC, axle_number, axle_code'
+  );
+  assert(orderedConfigs.length === 2, `both axle configs present for the ordering check (got ${orderedConfigs.length})`);
+  assert(orderedConfigs[0].id === AXLE_CONFIG_ID && orderedConfigs[0].axle_code === '3A', `standard 3A lists first (got ${orderedConfigs[0] && orderedConfigs[0].axle_code})`);
+  assert(orderedConfigs[1].id === AXLE_CONFIG_ID_DERIVED, `derived 2X-CUSTOM lists second despite fewer axles (got ${orderedConfigs[1] && orderedConfigs[1].axle_code})`);
 
   assert(client.config.stationId === STATION_ID, `station GUID resolved onto BackendClient.config.stationId (got ${client.config.stationId})`);
 
@@ -170,6 +191,29 @@ async function main() {
     axles: [{ axleNumber: 1, measuredWeightKg: 5000 }]
   });
   assert(unknownConfigResult === null, 'fails closed (returns null) for an unsynced/unknown axle configuration, never guesses');
+
+  // legalFrameworkOverride (2026-09-12, N-axle commercial pre-compliance): the axle
+  // config's OWN embedded framework (TRAFFIC_ACT) must NOT be what's used once an
+  // override is passed - mirrors truload-backend resolving legalFramework from
+  // Organization.SelectedLegalFramework for a commercial transaction, not the config's
+  // tag. No EAC-specific tolerance row exists in this fixture set, so passing 'EAC' here
+  // must fall back to the GLOBAL-only settings and therefore produce a DIFFERENT
+  // (non-5%) axle tolerance than the TRAFFIC_ACT-default result above - proving the
+  // override actually took effect rather than being silently ignored.
+  const overrideResult = ComplianceEngine.computeOfflineComplianceFromDb(db, {
+    axleConfigurationId: AXLE_CONFIG_ID,
+    axles: [
+      { axleNumber: 1, measuredWeightKg: 6600 },
+      { axleNumber: 2, measuredWeightKg: 8700 },
+      { axleNumber: 3, measuredWeightKg: 9300 }
+    ],
+    legalFrameworkOverride: 'EAC'
+  });
+  assert(overrideResult.legalFramework === 'EAC', `legalFrameworkOverride wins over the config's own TRAFFIC_ACT tag (got ${overrideResult && overrideResult.legalFramework})`);
+  const overrideGroupB = overrideResult.groupResults.find((g) => g.groupLabel === 'B');
+  const defaultGroupB = compliantResult.groupResults.find((g) => g.groupLabel === 'B');
+  assert(overrideGroupB.toleranceKg !== defaultGroupB.toleranceKg,
+    `EAC override falls back to GLOBAL-only tolerance (0%), genuinely different from TRAFFIC_ACT's 5% - not just accepted and ignored (got override=${overrideGroupB.toleranceKg}, default=${defaultGroupB.toleranceKg})`);
 
   // ---------------------------------------------------------------------
   // (c) LocalWeighingStore - direct CRUD/query behaviour
@@ -278,6 +322,88 @@ async function main() {
 
   const stillOpen = LocalWeighingStore.listOpenByPlate('KGG 555F', 'commercial');
   assert(stillOpen.length === 0, 'a finalized commercial weighing no longer shows up as resumable');
+
+  // ---------------------------------------------------------------------
+  // (f) Commercial N-axle pre-compliance capture (2026-09-12): when this org has
+  // opted into a legal framework AND a real multi-axle config is used, a commercial
+  // capture runs the SAME compliance engine as enforcement over its own axle
+  // readings instead of tare/gross/net-only math - closes the deferred item from the
+  // offline-weighing redesign follow-up.
+  // ---------------------------------------------------------------------
+  console.log('\n--- (f) Commercial capture: N-axle pre-compliance (legal framework configured) ---');
+
+  BackendClient.startCommercialSession({
+    plateNumber: 'KHH 666G', weighingType: 'gross',
+    axleConfigurationId: AXLE_CONFIG_ID,
+    commercialLegalFramework: 'TRAFFIC_ACT'
+  });
+  const nAxleLocalId1 = client.getSession().localSessionId;
+  const firstNAxleResult = await BackendClient.completeSession({
+    plateNumber: 'KHH 666G', axleConfigurationId: AXLE_CONFIG_ID,
+    axles: [
+      { axleNumber: 1, weight: 9000 },
+      { axleNumber: 2, weight: 12000 },
+      { axleNumber: 3, weight: 12000 }
+    ],
+    gvw: 33000
+  });
+  assert(firstNAxleResult === null, 'N-axle commercial capture is still local-only (never posts to the enforcement-shaped endpoint)');
+  assert(networkCallCount === 0, `still zero network calls for the N-axle commercial capture (got ${networkCallCount})`);
+
+  const firstNAxleRecord = LocalWeighingStore.get(nAxleLocalId1);
+  assert(firstNAxleRecord.provisionalResult && firstNAxleRecord.provisionalResult.overallStatus === 'OVERLOAD',
+    `first N-axle visit runs the real compliance engine instead of tare/gross/net math (got ${firstNAxleRecord.provisionalResult && firstNAxleRecord.provisionalResult.overallStatus})`);
+  const nAxleGroupB = firstNAxleRecord.provisionalResult.groupResults.find((g) => g.groupLabel === 'B');
+  assert(nAxleGroupB && nAxleGroupB.overloadKg > 0, `group B overload correctly detected on the N-axle commercial reading (got ${nAxleGroupB && nAxleGroupB.overloadKg})`);
+  assert(firstNAxleRecord.provisionalResult.netInfo === null, 'no netInfo on the first/only visit - nothing to pair against yet');
+  assert(firstNAxleRecord.isFinal === false,
+    'CRITICAL: a first N-axle visit that DID get a (non-null) compliance verdict must still stay OPEN/resumable, not be mistaken for finalized just because provisionalResult is non-null');
+
+  const nAxleOpenCandidates = LocalWeighingStore.listOpenByPlate('KHH 666G', 'commercial');
+  assert(nAxleOpenCandidates.length === 1 && nAxleOpenCandidates[0].localId === nAxleLocalId1, 'the first N-axle visit is discoverable as a resumable open weighing');
+
+  // Return visit (tare, empty): resumes the same local_id, pairs against the first
+  // weight for a real net-weight figure, AND still gets its own compliance verdict for
+  // this visit's own axle distribution (an empty vehicle, so LEGAL is expected).
+  BackendClient.startCommercialSession({
+    plateNumber: 'KHH 666G', weighingType: 'tare',
+    axleConfigurationId: AXLE_CONFIG_ID,
+    commercialLegalFramework: 'TRAFFIC_ACT',
+    resume: { localId: nAxleLocalId1, firstWeightKg: firstNAxleRecord.gvwMeasuredKg, firstWeightType: firstNAxleRecord.weighingType }
+  });
+  assert(client.getSession().localSessionId === nAxleLocalId1, 'N-axle resume reuses the SAME local_id rather than starting a new physical-weighing record');
+  const secondNAxleResult = await BackendClient.completeSession({
+    plateNumber: 'KHH 666G', axleConfigurationId: AXLE_CONFIG_ID,
+    axles: [
+      { axleNumber: 1, weight: 2600 },
+      { axleNumber: 2, weight: 3000 },
+      { axleNumber: 3, weight: 3000 }
+    ],
+    gvw: 8600
+  });
+  assert(secondNAxleResult === null, 'second (resumed) N-axle visit is also local-only');
+  assert(networkCallCount === 0, 'still zero network calls after the resumed N-axle finalizing visit');
+
+  const finalNAxleRecord = LocalWeighingStore.get(nAxleLocalId1);
+  assert(finalNAxleRecord.provisionalResult && finalNAxleRecord.provisionalResult.overallStatus === 'LEGAL',
+    `second (empty/tare) N-axle visit's own compliance verdict is LEGAL (got ${finalNAxleRecord.provisionalResult && finalNAxleRecord.provisionalResult.overallStatus})`);
+  assert(finalNAxleRecord.provisionalResult.netInfo && finalNAxleRecord.provisionalResult.netInfo.netWeightKg === 24400,
+    `net weight correctly computed as 33000-8600=24400 across the two N-axle visits (got ${finalNAxleRecord.provisionalResult && finalNAxleRecord.provisionalResult.netInfo && finalNAxleRecord.provisionalResult.netInfo.netWeightKg})`);
+  assert(finalNAxleRecord.isFinal === true, 'the paired (net-weight-bearing) N-axle visit correctly finalizes the physical weighing');
+
+  const nAxleStillOpen = LocalWeighingStore.listOpenByPlate('KHH 666G', 'commercial');
+  assert(nAxleStillOpen.length === 0, 'a finalized N-axle commercial weighing no longer shows up as resumable');
+
+  // Control: legacy single-reading commercial capture (no commercialLegalFramework, e.g.
+  // an org that never opted in) must be completely unaffected by the above - re-verify
+  // scenario (e)'s exact shape still holds when a real axleConfigurationId IS present
+  // (unlike scenario (e), which used none at all) but no framework was resolved for it.
+  BackendClient.startCommercialSession({ plateNumber: 'KJJ 777H', weighingType: 'gross', axleConfigurationId: AXLE_CONFIG_ID });
+  const legacyWithConfigLocalId = client.getSession().localSessionId;
+  await BackendClient.completeSession({ plateNumber: 'KJJ 777H', axleConfigurationId: AXLE_CONFIG_ID, axles: [{ axleNumber: 1, weight: 32400 }], gvw: 32400 });
+  const legacyWithConfigRecord = LocalWeighingStore.get(legacyWithConfigLocalId);
+  assert(legacyWithConfigRecord.provisionalResult === null, 'an axle config present but NO legal framework resolved stays on the legacy path (no compliance verdict attempted on a single lump reading)');
+  assert(legacyWithConfigRecord.isFinal === false, 'legacy first visit (no framework) still correctly stays open for resume');
 
   Database.close();
   try {

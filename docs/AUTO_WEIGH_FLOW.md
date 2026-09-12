@@ -578,14 +578,40 @@ pure weight recording only. `ConfigSyncService.syncOrganizationSettings()`
 (`organization.selectedLegalFramework` via `ConfigManager`), closing the loop so
 TruConnect can see whether a tenant has opted in.
 
-**Not yet built**: TruConnect's commercial capture is still architecturally a single GVW
-reading ("1 expected axle", `commercial:start-weighing` in `main.js`) — actually reusing
-an axle configuration for a real N-axle commercial capture ("redistribute or adjust load
-correctly") needs `commercial:start-weighing`/the capture loop to use the config's real
-axle count and call `computeOfflineComplianceFromDb` (already mode-agnostic) instead of
-`computeCommercialCaptureResult` when a framework is configured. Deferred as a distinct
-UI/state-machine feature rather than shipped half-tested — see the plan file's
-"Follow-up round 2" section.
+**Built (2026-09-12), closing the item above**: `commercial:start-weighing` now resolves
+the real expected axle count from the selected axle configuration whenever this org has
+opted into a legal framework AND that configuration has more than one axle (still exactly
+1 expected axle otherwise - fully backward compatible). The capture loop is unchanged
+(the same `mobile:capture-axle` primitive enforcement already loops N times over), so both
+Mobile and Multideck reuse it as-is. `BackendClient._computeCommercialProvisionalResult`
+(new, shared by `sendAutoweigh`/`completeSession`) calls `computeOfflineComplianceFromDb`
+instead of `computeCommercialCaptureResult` for this path, with the org's selected
+framework passed as `legalFrameworkOverride` (mirrors `WeighingService.
+CalculateComplianceAsync` resolving the framework from `Organization.
+SelectedLegalFramework` for a commercial transaction, not the axle config's own tag). When
+a prior first weight exists (the paired/finalizing visit), the tare/gross/net figures are
+still computed and attached as `netInfo` alongside the compliance verdict, so the operator
+never loses that number - just no longer the primary result. A visit that got a compliance
+verdict is NOT automatically "final": only a visit that produced a real net-weight pairing
+closes the physical weighing (`BackendClient._commercialResultHasNetWeight`), otherwise a
+first N-axle visit with a real (non-null) compliance verdict would have been wrongly
+treated as finalized. Covered by new `tests/local-weighing-and-db-integration-test.js`
+assertions (section f): first-visit compliance verdict + stays open, resume pairs the net
+weight while re-running compliance on the second visit's own readings, and the legacy
+(no-framework) path is unaffected.
+
+**Two more real bugs found via live click-through against the deployed build and fixed the
+same day**: (1) `btnCaptureAxle`/`btnSkipAxle` were gated only on `weighingSetup.*.started`,
+never on the selected axle configuration's expected axle count - a 2-axle config still let
+an operator keep capturing a 3rd, 4th, ... axle indefinitely (the very next stable-weight
+event silently re-enabled Capture Axle). Fixed with an authoritative `captureComplete` flag
+(set from the backend's own `isComplete` response, not re-derived client-side) checked in
+both the button-enable logic and a hard guard inside `captureAxle()`/`skipAxle()`/
+`captureMultideckReading()` themselves. (2) `updateMobileGvw()`'s "Total GVW" tile kept
+blending the CURRENT live scale reading on top of the captured sum with no cutoff, so once
+a vehicle's weighing was actually complete, the tile kept climbing with whatever next
+landed on the scale instead of showing that vehicle's real, final GVW - now frozen at the
+captured total once `captureComplete` is true.
 
 ---
 

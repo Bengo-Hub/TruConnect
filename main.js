@@ -1539,15 +1539,20 @@ ipcMain.handle('mobile:cancel-weighing', async (event, reason) => {
 ipcMain.handle('axle-config:list-local', async () => {
   try {
     const db = Database.getDb();
+    // Standard axle configurations (2A, 3A, ...) list before derived/custom ones of the
+    // same axle count (user request, 2026-09-12) - mirrors the same ordering fix on
+    // truload-backend's AxleConfigurationRepository.GetAllAsync, so the operator sees
+    // the common cases first in this picker too.
     const rows = db.all(
-      'SELECT id, axle_code, axle_name, axle_number, gvw_permissible_kg FROM backend_axle_configurations WHERE is_active = 1 ORDER BY axle_number, axle_code'
+      'SELECT id, axle_code, axle_name, axle_number, gvw_permissible_kg, is_standard FROM backend_axle_configurations WHERE is_active = 1 ORDER BY is_standard DESC, axle_number, axle_code'
     );
     return { success: true, configs: rows.map((r) => ({
       id: r.id,
       axleCode: r.axle_code,
       axleName: r.axle_name,
       axleNumber: r.axle_number,
-      gvwPermissibleKg: r.gvw_permissible_kg
+      gvwPermissibleKg: r.gvw_permissible_kg,
+      isStandard: Boolean(r.is_standard)
     })) };
   } catch (error) {
     console.error('Error listing local axle configurations:', error);
@@ -1626,16 +1631,45 @@ ipcMain.handle('commercial:start-weighing', async (event, params = {}) => {
       }
     }
 
-    BackendClient.startCommercialSession({ plateNumber, axleConfigurationId, axleConfigurationCode, weighingType, resume });
+    // N-axle commercial pre-compliance capture (2026-09-12, closes the deferred item from
+    // the offline-weighing redesign): a commercial visit still captures exactly ONE reading
+    // by default (expectedAxles=1, tare/gross/net billing math only) UNLESS this tenant has
+    // opted into a legal framework (Organization.SelectedLegalFramework, synced locally by
+    // ConfigSyncService.syncOrganizationSettings) AND picked a real multi-axle configuration
+    // - in that case the visit captures per-axle like enforcement does, so the local preview
+    // can run the same compliance engine instead of just tare/gross/net. Resolved here (not
+    // trusted from the renderer) so this is a single source of truth regardless of caller.
+    let expectedAxles = 1;
+    const selectedLegalFramework = ConfigSyncService.getStatus().selectedLegalFramework || null;
+    if (selectedLegalFramework && axleConfigurationId) {
+      const db = Database.getDb();
+      const configRow = db.get('SELECT axle_number FROM backend_axle_configurations WHERE id = ?', [axleConfigurationId]);
+      if (configRow && configRow.axle_number > 1) {
+        expectedAxles = configRow.axle_number;
+      }
+    }
+
+    BackendClient.startCommercialSession({
+      plateNumber,
+      axleConfigurationId,
+      axleConfigurationCode,
+      weighingType,
+      resume,
+      // Resolved once here and carried through the session (incl. across a resume) rather
+      // than re-read later, mirroring how commercialFirstWeightKg/weighingType are already
+      // threaded - keeps both visits of one transaction consistent even if the org's setting
+      // changes mid-session.
+      commercialLegalFramework: expectedAxles > 1 ? selectedLegalFramework : null
+    });
     StateManager.setAxleConfiguration({
-      expectedAxles: 1,
+      expectedAxles,
       axleConfigurationId: axleConfigurationId || null,
       axleConfigurationCode: axleConfigurationCode || 'COMMERCIAL',
       plateNumber
     });
     StateManager.setAutoDetection(true, { zeroThreshold: 50, stableThreshold: 100, requiredStableReadings: 3 });
 
-    return { success: true, session: BackendClient.getStatus().currentSession, resumed: Boolean(resume) };
+    return { success: true, session: BackendClient.getStatus().currentSession, resumed: Boolean(resume), expectedAxles };
   } catch (error) {
     console.error('Error starting commercial weighing:', error);
     return { success: false, error: error.message };

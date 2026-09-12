@@ -1126,6 +1126,16 @@
       color: var(--text);
       font-size: 0.9rem;
     }
+    /* The closed <select> box picks up the dark theme via the rule above, but
+       Chromium/Electron renders the OPEN options popup on its own opaque white
+       system background regardless - it only honors color/background-color set
+       directly on <option>, not inherited from <select>. Without this, option
+       text stayed near-white-on-white (var(--text) on the popup's default white),
+       unreadable. */
+    .setup-field select option {
+      color: #1a1a1a;
+      background-color: #ffffff;
+    }
     .setup-field input[type="text"]:focus,
     .setup-field select:focus {
       outline: none;
@@ -1822,9 +1832,15 @@
     // session locks the setup card and enables capture; captureMode is 'enforcement' |
     // 'commercial'. resumeCandidate holds a found-but-not-yet-accepted open local
     // commercial weighing for the typed plate (see checkForResumableWeighing).
+    // captureComplete (2026-09-12 fix): authoritative "all expected axles captured" flag,
+    // set from the backend's own StateManager-derived `isComplete` response after every
+    // capture - NOT re-derived from a client-side axle count, and NOT something a later
+    // "stable" broadcast is allowed to silently clear. Previously nothing gated Capture/
+    // Skip on axle count at all: selecting a 2-axle config still let an operator capture a
+    // 3rd (or Nth) axle indefinitely, which also fed the GVW preview (see updateMobileGvw).
     const weighingSetup = {
-      mobile: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null },
-      multideck: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null }
+      mobile: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null, captureComplete: false },
+      multideck: { started: false, captureMode: 'enforcement', plateNumber: '', axleConfigurationId: '', axleConfigurationCode: '', expectedAxles: 0, weighingType: 'gross', resumeCandidate: null, activeLocalId: null, captureComplete: false }
     };
     let localAxleConfigs = [];
     let plateCheckDebounceTimer = null;
@@ -2343,21 +2359,30 @@
         indicator.classList.remove('unstable');
         indicator.classList.add('stable');
         indicator.innerHTML = '<i class="fas fa-check-circle"></i> <span>Stable</span>';
-        // Capture also requires a started weighing session (plate + axle config
-        // confirmed) - offline-weighing redesign, 2026-09.
-        elements.btnCaptureAxle.disabled = !weighingSetup.mobile.started;
+        // Capture requires a started weighing session (plate + axle config confirmed)
+        // AND not yet having captured every expected axle (2026-09-12 fix: this used to
+        // only check `started`, so once weighing-complete this button was silently
+        // re-enabled by the very next stable reading, letting an operator capture past
+        // the selected axle configuration's real axle count).
+        elements.btnCaptureAxle.disabled = !weighingSetup.mobile.started || weighingSetup.mobile.captureComplete;
+        if (elements.btnSkipAxle) elements.btnSkipAxle.disabled = !weighingSetup.mobile.started || weighingSetup.mobile.captureComplete;
       } else {
         indicator.classList.remove('stable');
         indicator.classList.add('unstable');
         indicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Unstable</span>';
         elements.btnCaptureAxle.disabled = true;
+        if (elements.btnSkipAxle) elements.btnSkipAxle.disabled = true;
       }
     }
 
-    // Enable/disable the multideck "Capture Reading" button (offline-weighing redesign)
+    // Enable/disable the multideck "Capture Reading" button (offline-weighing redesign).
+    // 2026-09-12 fix: also gated on captureComplete - previously only checked
+    // started/isStable, so "Capture Reading" (which submits ALL deck positions in one
+    // press) stayed clickable after the vehicle's axle configuration was already fully
+    // captured, appending extra mislabeled axle entries on every further press.
     function updateMultideckCaptureGate() {
       if (!elements.btnMultideckCapture) return;
-      elements.btnMultideckCapture.disabled = !(weighingSetup.multideck.started && isStable);
+      elements.btnMultideckCapture.disabled = !(weighingSetup.multideck.started && isStable) || weighingSetup.multideck.captureComplete;
     }
 
     // ============================================================
@@ -2588,7 +2613,10 @@
             alert('Could not start the commercial weighing: ' + ((result && result.error) || 'unknown error'));
             return;
           }
-          s.expectedAxles = 1;
+          // main.js resolves the REAL expected axle count server-side (single reading
+          // unless this org has opted into a legal framework AND a real multi-axle config
+          // was picked - see commercial:start-weighing) - trust its answer, don't assume 1.
+          s.expectedAxles = result.expectedAxles || 1;
           s.weighingType = weighingType;
         } else {
           if (!api.setAxleConfig) return;
@@ -2604,6 +2632,7 @@
         s.plateNumber = plate;
         s.axleConfigurationId = axleConfigurationId;
         s.axleConfigurationCode = axleConfigurationCode;
+        s.captureComplete = false;
 
         els.plateInput.disabled = true;
         if (els.axleConfigSelect) els.axleConfigSelect.disabled = true;
@@ -2612,7 +2641,7 @@
         if (els.modeCommercial) els.modeCommercial.disabled = true;
         els.startBtn.style.display = 'none';
         els.resumeBanner.classList.remove('visible');
-        els.lockedText.textContent = `Weighing ${plate}${axleConfigurationCode ? ' - ' + axleConfigurationCode : ''}${s.captureMode === 'commercial' ? ' (' + s.weighingType + ')' : ''}`;
+        els.lockedText.textContent = `Weighing ${plate}${axleConfigurationCode ? ' - ' + axleConfigurationCode : ''}${s.captureMode === 'commercial' ? ' (' + s.weighingType + (s.expectedAxles > 1 ? `, ${s.expectedAxles} axles - pre-compliance check` : '') + ')' : ''}`;
         els.lockedNote.classList.add('visible');
         resetResultPanel(prefix);
 
@@ -2638,6 +2667,7 @@
       s.expectedAxles = 0;
       s.resumeCandidate = null;
       s.activeLocalId = null;
+      s.captureComplete = false;
 
       els.plateInput.value = '';
       els.plateInput.disabled = false;
@@ -2655,6 +2685,7 @@
         updateMultideckCaptureGate();
       } else {
         if (elements.btnCaptureAxle) elements.btnCaptureAxle.disabled = true;
+        if (elements.btnSkipAxle) elements.btnSkipAxle.disabled = true;
         if (elements.btnMobileComplete) elements.btnMobileComplete.disabled = true;
       }
 
@@ -2693,7 +2724,11 @@
       }
 
       if (result.overallStatus) {
-        // Enforcement compliance result (ComplianceEngine.computeOfflineComplianceFromDb)
+        // Enforcement compliance result, OR a commercial N-axle pre-compliance capture
+        // (ComplianceEngine.computeOfflineComplianceFromDb) - see
+        // BackendClient._computeCommercialProvisionalResult. The latter also carries a
+        // `netInfo` sibling (tare/gross/net) once a first weight exists to pair against;
+        // enforcement results never have one, so this stays a no-op there.
         const statusClass = result.overallStatus === 'LEGAL' ? 'status-legal' : result.overallStatus === 'WARNING' ? 'status-warning' : 'status-overload';
         els.resultPanel.className = `result-panel ${statusClass} visible`;
         els.resultStatus.textContent = result.overallStatus;
@@ -2704,6 +2739,10 @@
             <td>${g.effectiveLimitKg.toLocaleString()} kg</td>
             <td>${g.overloadKg > 0 ? '+' + g.overloadKg.toLocaleString() + ' kg' : '-'}</td>
           </tr>`).join('');
+        const netInfoHtml = result.netInfo ? `
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:0.85rem; color: var(--text-secondary);">
+            Net ${result.netInfo.netWeightKg.toLocaleString()} kg (Tare ${result.netInfo.tareWeightKg.toLocaleString()} kg &middot; Gross ${result.netInfo.grossWeightKg.toLocaleString()} kg)
+          </div>` : '';
         els.resultBody.innerHTML = `
           <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
             GVW ${result.gvwMeasuredKg.toLocaleString()} kg / limit ${result.gvwEffectiveLimitKg.toLocaleString()} kg${result.gvwOverloadKg > 0 ? ` (over by ${result.gvwOverloadKg.toLocaleString()} kg)` : ''}
@@ -2711,7 +2750,7 @@
           <table class="result-groups-table">
             <thead><tr><th>Axle Group</th><th>Weight</th><th>Limit (+tol)</th><th>Overload</th></tr></thead>
             <tbody>${rows}</tbody>
-          </table>`;
+          </table>${netInfoHtml}`;
       } else if ('netWeightKg' in result) {
         // Commercial capture result (ComplianceEngine.computeCommercialCaptureResult)
         els.resultPanel.className = 'result-panel status-legal visible';
@@ -2734,11 +2773,19 @@
 
     async function captureMultideckReading() {
       const s = weighingSetup.multideck;
-      if (!s.started || !api.sendAxleCaptured) return;
+      // Hard guard (2026-09-12 fix), independent of the button's own disabled state -
+      // "Capture Reading" submits ALL positions in one press, so a repeat press once
+      // already complete would append a second full set of (mislabeled) axle entries.
+      if (!s.started || s.captureComplete || !api.sendAxleCaptured) return;
       elements.btnMultideckCapture.disabled = true;
       let lastResponse = null;
 
-      if (s.captureMode === 'commercial') {
+      // Legacy single-reading commercial (no legal framework configured, or a 1-axle
+      // config) sums all 4 decks as ONE reading. Enforcement, AND commercial once an
+      // N-axle pre-compliance config is selected (s.expectedAxles > 1 - see
+      // startWeighing), loop deck-by-deck exactly like enforcement already did, reusing
+      // the same per-position capture rather than a second parallel mechanism.
+      if (s.captureMode === 'commercial' && s.expectedAxles <= 1) {
         // Commercial only ever needs ONE reading per visit (tare or gross) - the
         // vehicle sits across all 4 decks at once, so that reading is their SUM
         // (matches the GVW tile), never a single deck's value.
@@ -2749,9 +2796,10 @@
           console.error('Error capturing multideck commercial reading:', error);
         }
       } else {
-        // Enforcement: each deck is one axle POSITION - ComplianceEngine's own
-        // axle-grouping lookup (from synced weight references) determines which group
-        // each position belongs to, so this stays correct regardless of layout.
+        // Enforcement, or N-axle commercial: each deck is one axle POSITION -
+        // ComplianceEngine's own axle-grouping lookup (from synced weight references)
+        // determines which group each position belongs to, so this stays correct
+        // regardless of layout.
         const count = s.expectedAxles > 0 ? Math.min(s.expectedAxles, 4) : 4;
         if (s.expectedAxles > 4) {
           console.warn(`[Multideck] Axle configuration expects ${s.expectedAxles} axles but this platform has 4 decks - capturing the first 4 positions only.`);
@@ -2767,8 +2815,12 @@
       if (lastResponse && lastResponse.localWeighing) {
         renderLocalWeighingResult('multideck', lastResponse.localWeighing);
       }
+      // Authoritative completeness from StateManager (via this IPC response) - persisted
+      // so updateMultideckCaptureGate() can't re-enable "Capture Reading" past this
+      // vehicle's expected axle/deck count (2026-09-12 fix).
+      s.captureComplete = Boolean(lastResponse && lastResponse.isComplete);
       if (elements.btnMultideckComplete) {
-        elements.btnMultideckComplete.disabled = !(lastResponse && lastResponse.isComplete);
+        elements.btnMultideckComplete.disabled = !s.captureComplete;
       }
       updateMultideckCaptureGate();
     }
@@ -2915,6 +2967,14 @@
 
     // Capture axle (mobile mode)
     async function captureAxle() {
+      // Hard guard (2026-09-12 fix), independent of the button's own disabled state -
+      // never append an axle beyond the selected configuration's expected count, however
+      // this got triggered (click, stray Enter, a stale re-enable from updateStability).
+      if (weighingSetup.mobile.captureComplete) {
+        console.warn('Cannot capture: all expected axles for this vehicle are already captured - press Complete Weighing.');
+        return;
+      }
+
       if (!isStable) {
         console.warn('Cannot capture: weight is unstable');
         return;
@@ -2946,9 +3006,16 @@
           if (result && result.localWeighing) {
             renderLocalWeighingResult('mobile', result.localWeighing);
           }
+          // Authoritative completeness comes from StateManager (via this IPC response),
+          // not a client-recomputed axle count - persisted so updateStability's next tick
+          // can't silently re-enable Capture/Skip past this vehicle's expected axle count.
+          weighingSetup.mobile.captureComplete = Boolean(result && result.isComplete);
+          elements.btnCaptureAxle.disabled = weighingSetup.mobile.captureComplete;
+          if (elements.btnSkipAxle) elements.btnSkipAxle.disabled = weighingSetup.mobile.captureComplete;
           if (elements.btnMobileComplete) {
             elements.btnMobileComplete.disabled = !(result && result.isComplete);
           }
+          updateMobileGvw();
         } catch (error) {
           console.error('Error capturing axle:', error);
           // Revert local change on error
@@ -2963,6 +3030,12 @@
 
     // Skip axle
     function skipAxle() {
+      // Same hard guard as captureAxle() - skipping past the configured axle count is the
+      // same bug shape (2026-09-12 fix).
+      if (weighingSetup.mobile.captureComplete) {
+        console.warn('Cannot skip: all expected axles for this vehicle are already captured.');
+        return;
+      }
       const axleNumber = axles.length + 1;
       axles.push({ number: axleNumber, weight: 0, skipped: true });
 
@@ -3033,18 +3106,25 @@
       elements.axleList.innerHTML = listHtml;
     }
 
-    // Update mobile GVW - shows running total (captured + current weight preview)
+    // Update mobile GVW - shows running total (captured + current weight preview) WHILE
+    // still capturing, then freezes at the captured total once complete.
+    //
+    // 2026-09-12 fix (real bug, confirmed live): this used to always add the current live
+    // scale reading on top of the captured sum with no cutoff, so once the vehicle's
+    // configured axle count was already fully captured, the GVW tile kept climbing by
+    // whatever next landed on the scale (e.g. the next vehicle) instead of showing the
+    // just-weighed vehicle's real, final GVW. Freezing on captureComplete stops that -
+    // the preview blend is only meaningful before the last expected axle is captured.
     function updateMobileGvw() {
       const capturedGvw = axles.reduce((sum, axle) => sum + (axle.weight || 0), 0);
-      // Include current weight as a preview of what GVW would be if captured
-      const runningTotal = capturedGvw + (currentWeight || 0);
+      const runningTotal = weighingSetup.mobile.captureComplete ? capturedGvw : capturedGvw + (currentWeight || 0);
 
       // Update both displays
       elements.mobileGvw.textContent = runningTotal.toLocaleString();
       elements.gvwValue.textContent = runningTotal.toLocaleString();
 
       // Log for debugging
-      console.log(`GVW Update: captured=${capturedGvw}, current=${currentWeight}, total=${runningTotal}`);
+      console.log(`GVW Update: captured=${capturedGvw}, current=${currentWeight}, complete=${weighingSetup.mobile.captureComplete}, total=${runningTotal}`);
     }
 
     // Open settings
