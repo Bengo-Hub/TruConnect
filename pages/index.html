@@ -2545,8 +2545,30 @@
       const axleConfigurationCode = axleOption ? axleOption.dataset.code : '';
       const expectedAxles = axleOption ? (parseInt(axleOption.dataset.axles, 10) || 0) : 0;
 
-      if (s.captureMode === 'enforcement' && !axleConfigurationId) {
-        alert('Select an axle configuration for an enforcement weighing.');
+      // Gate: station + reference config must have synced from the cloud at least once
+      // (checked against the local SQLite mirror, so this still passes while offline
+      // after a prior successful sync - see ConfigSyncService.getStatus()), and an axle
+      // configuration must be selected for BOTH modes. Commercial weighing reuses the
+      // same enforcement axle configs (per-axle tolerance/GVW references) for its own
+      // provisional compliance check, so it is not exempt from either requirement.
+      if (localAxleConfigs.length === 0) {
+        alert('No axle configurations have synced from the cloud yet. Connect to the network so TruConnect can sync station and axle-configuration data, then try again.');
+        return;
+      }
+      if (!axleConfigurationId) {
+        alert('Select an axle configuration before starting the weighing.');
+        return;
+      }
+      try {
+        const syncStatusRes = await api.invoke('config-sync:get-status');
+        const syncStatus = syncStatusRes && syncStatusRes.status;
+        if (!syncStatus || !syncStatus.stationId) {
+          alert('This station has not been resolved against the cloud yet. Check the station code in Settings and run "Sync Now" once online before starting a weighing.');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking config sync status:', error);
+        alert('Could not verify station/config sync status - try again.');
         return;
       }
 

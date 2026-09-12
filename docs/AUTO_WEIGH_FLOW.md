@@ -553,6 +553,40 @@ always write the `local_weighings` row first; only the network-queue step is ski
 station is unresolved, and the row is flagged `awaiting_station_resolution` rather than never
 existing.
 
+#### Capture gating + commercial pre-compliance opt-in (2026-09-12)
+
+A real click-through surfaced two gaps in the round above. First, `startWeighing()`
+(`pages/index.html`) required an axle configuration only for enforcement mode and never
+checked whether station/config data had ever synced from the cloud, so a fresh install
+could "start" a weighing with nothing behind it. It now blocks (both modes) unless
+`localAxleConfigs` is non-empty, an axle configuration is selected, and
+`ConfigSyncService.getStatus().stationId` has resolved — the last check reads the local
+SQLite mirror, not the in-memory `lastSyncedAt` (which resets on every restart), so it
+still passes fully offline after a prior successful sync.
+
+Second, `truload-backend`'s `CommercialModeFilter` blanket-blocked the entire
+`/api/v1/acts` prefix for every CommercialWeighing tenant, including the tolerance data
+this engine needs — a real 403 in production. A commercial tenant can now opt into a
+legal framework (`Organization.SelectedLegalFramework`, "TRAFFIC_ACT"/"EAC"/null) for an
+axle-load pre-compliance check, e.g. a transporter confirming their load would pass an
+enforcement weighbridge's tolerances before they get there, reusing the same axle
+configuration/tolerance engine enforcement uses. Default is null (no framework), since
+TruLoad may run outside Kenya/East Africa — a commercial ticket with no framework
+configured never calculates or flags compliance (`ControlStatus = "NotEvaluated"`),
+pure weight recording only. `ConfigSyncService.syncOrganizationSettings()`
+(`GET /api/v1/organizations/current`) now caches this locally
+(`organization.selectedLegalFramework` via `ConfigManager`), closing the loop so
+TruConnect can see whether a tenant has opted in.
+
+**Not yet built**: TruConnect's commercial capture is still architecturally a single GVW
+reading ("1 expected axle", `commercial:start-weighing` in `main.js`) — actually reusing
+an axle configuration for a real N-axle commercial capture ("redistribute or adjust load
+correctly") needs `commercial:start-weighing`/the capture loop to use the config's real
+axle count and call `computeOfflineComplianceFromDb` (already mode-agnostic) instead of
+`computeCommercialCaptureResult` when a framework is configured. Deferred as a distinct
+UI/state-machine feature rather than shipped half-tested — see the plan file's
+"Follow-up round 2" section.
+
 ---
 
 ## Troubleshooting

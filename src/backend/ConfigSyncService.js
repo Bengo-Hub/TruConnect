@@ -25,6 +25,7 @@ const StateManager = require('../core/StateManager');
 const STATIONS_ENDPOINT = '/api/v1/Stations';
 const AXLE_CONFIG_ENDPOINT = '/api/v1/AxleConfiguration';
 const TOLERANCES_ENDPOINT = '/api/v1/acts/tolerances';
+const ORGANIZATION_CURRENT_ENDPOINT = '/api/v1/organizations/current';
 const TOLERANCE_LEGAL_FRAMEWORKS = ['TRAFFIC_ACT', 'EAC'];
 const DEFAULT_PERIODIC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h - slow-moving reference data
 
@@ -182,6 +183,24 @@ class ConfigSyncService {
     }
     this._upsertBackendToleranceSettings(all);
     return all;
+  }
+
+  /**
+   * Fetch the current tenant's Organization (GET /api/v1/organizations/current, already
+   * gated by config.read - same permission the tolerances sync needed) and cache the one
+   * field that matters offline: whether a CommercialWeighing tenant has opted into a legal
+   * framework (Organization.SelectedLegalFramework) for axle-load pre-compliance checks.
+   * Stored via ConfigManager (like station.code) rather than a table - a single current
+   * value, not a mirrored collection. Null/absent means "no framework configured": local
+   * capture must not calculate or flag compliance for this tenant (see ComplianceEngine).
+   */
+  async syncOrganizationSettings() {
+    const org = await this._authorizedGet(ORGANIZATION_CURRENT_ENDPOINT);
+    const tenantType = org?.tenantType || null;
+    const selectedLegalFramework = org?.selectedLegalFramework || null;
+    ConfigManager.set('organization.tenantType', tenantType, true);
+    ConfigManager.set('organization.selectedLegalFramework', selectedLegalFramework, true);
+    return org;
   }
 
   _upsertBackendStations(stations) {
@@ -416,11 +435,18 @@ class ConfigSyncService {
     let error = null;
 
     try {
+      await this.syncOrganizationSettings();
+    } catch (err) {
+      console.warn('[ConfigSyncService] Organization settings fetch failed (using cached value if any):', err.message);
+      error = err.message;
+    }
+
+    try {
       const stations = await this.syncStations();
       stationsCount = Array.isArray(stations) ? stations.length : 0;
     } catch (err) {
       console.warn('[ConfigSyncService] Stations fetch failed (using cached mirror if any):', err.message);
-      error = err.message;
+      error = error || err.message;
     }
 
     try {
@@ -499,12 +525,32 @@ class ConfigSyncService {
     return { applied: true, drift: this.lastDrift };
   }
 
+  /**
+   * Readiness snapshot for the capture screens' weighing-start gate (pages/index.html
+   * startWeighing()). `stationId`/`axleConfigCount` are read from the local SQLite
+   * mirror, NOT from `lastSyncedAt` (in-memory only, resets to null on every app
+   * restart) - that's what lets a device that synced once, then went offline and
+   * restarted, still correctly report itself as "ready" without a network call.
+   */
   getStatus() {
+    const BackendClient = require('./BackendClient');
+    const client = BackendClient.getInstance();
+    const axleConfigRow = this._db().get(
+      'SELECT COUNT(*) as c FROM backend_axle_configurations WHERE is_active = 1'
+    );
+    const stationRow = this._db().get('SELECT COUNT(*) as c FROM backend_stations');
+
     return {
       lastSyncedAt: this.lastSyncedAt,
       lastError: this.lastError,
       drift: this.lastDrift,
-      periodicIntervalMs: this.periodicIntervalMs
+      periodicIntervalMs: this.periodicIntervalMs,
+      stationId: client.config.stationId || null,
+      stationCode: ConfigManager.get('station.code', ''),
+      hasSyncedStations: Boolean(stationRow && stationRow.c > 0),
+      axleConfigCount: axleConfigRow ? axleConfigRow.c : 0,
+      tenantType: ConfigManager.get('organization.tenantType', null),
+      selectedLegalFramework: ConfigManager.get('organization.selectedLegalFramework', null)
     };
   }
 

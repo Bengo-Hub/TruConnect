@@ -94,7 +94,10 @@ async function main() {
   // never guesses, so the test must set this up explicitly too.
   ConfigManager.set('station.code', 'NRB-01');
 
+  const fakeOrganization = { tenantType: 'CommercialWeighing', selectedLegalFramework: 'TRAFFIC_ACT' };
+
   client._fetch = async (url) => {
+    if (url.includes('/organizations/current')) return { ok: true, json: async () => fakeOrganization };
     if (url.includes('/Stations')) return { ok: true, json: async () => fakeStations };
     if (url.includes('/AxleConfiguration')) return { ok: true, json: async () => fakeAxleConfigs };
     if (url.includes('/acts/tolerances')) {
@@ -109,6 +112,11 @@ async function main() {
   assert(syncSummary.stationsCount === 1, `synced 1 station (got ${syncSummary.stationsCount})`);
   assert(syncSummary.axleConfigCount === 1, `synced 1 axle config (got ${syncSummary.axleConfigCount})`);
   assert(syncSummary.toleranceSettingsCount >= 2, `synced tolerance settings (got ${syncSummary.toleranceSettingsCount})`);
+
+  const syncedStatus = ConfigSyncService.getStatus();
+  assert(syncedStatus.selectedLegalFramework === 'TRAFFIC_ACT', `org's selected legal framework cached locally (got ${syncedStatus.selectedLegalFramework})`);
+  assert(syncedStatus.axleConfigCount === 1, `getStatus() reports axle config count from the SQLite mirror, not lastSyncedAt (got ${syncedStatus.axleConfigCount})`);
+  assert(syncedStatus.stationId === STATION_ID, `getStatus() reports the resolved station id (got ${syncedStatus.stationId})`);
 
   const db = Database.getDb();
   const refRows = db.all('SELECT * FROM backend_axle_weight_references WHERE axle_configuration_id = ?', [AXLE_CONFIG_ID]);
