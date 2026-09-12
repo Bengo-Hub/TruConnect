@@ -1625,6 +1625,19 @@
                 <span>Last synced: <span id="config-sync-last-synced">Never</span></span>
                 <span id="config-sync-error" style="color: var(--danger);"></span>
               </div>
+              <!-- Read-only display of this org's synced commercial pre-compliance opt-in
+                   (2026-09-12 fix): TruConnect's middleware service account only ever has
+                   config.read, never config.update, so this is deliberately view-only - actually
+                   changing it requires an org admin via truload-frontend's Setup > Commercial
+                   Settings tab. Added because a technician standing at the weighbridge had no way
+                   to see WHY a multi-axle configuration picked in Commercial mode only ever
+                   captured a single reading (this setting being unset is exactly why). -->
+              <div class="sync-meta-row" id="org-legal-framework-row" style="display: none;">
+                <span>Tenant type: <strong id="org-tenant-type">-</strong></span>
+                <span>Commercial legal framework: <strong id="org-legal-framework">Not configured</strong>
+                  <span style="color: var(--text-secondary); font-size: 0.85em;">(change in truload-frontend &gt; Setup &gt; Commercial Settings)</span>
+                </span>
+              </div>
               <button class="btn btn-secondary" id="btn-config-sync-now" style="padding: 10px 20px;">
                 <i class="fas fa-cloud-download-alt"></i>
                 Sync Now
@@ -2351,6 +2364,15 @@
           : 'Never';
         document.getElementById('config-sync-error').textContent = s.lastError || '';
         renderDrift(s.drift);
+
+        // View-only org info (2026-09-12 fix) - see this row's own HTML comment for why
+        // TruConnect never writes this, only displays what's already been synced.
+        const orgRow = document.getElementById('org-legal-framework-row');
+        if (orgRow && s.tenantType) {
+          orgRow.style.display = '';
+          document.getElementById('org-tenant-type').textContent = s.tenantType;
+          document.getElementById('org-legal-framework').textContent = s.selectedLegalFramework || 'Not configured (single-reading commercial mode)';
+        }
       } catch (error) {
         console.warn('Failed to refresh config sync status:', error);
       }
