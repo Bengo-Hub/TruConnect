@@ -321,6 +321,10 @@ class OutputManager {
 let instance = null;
 
 module.exports = {
+  broadcastWeight(weightData) {
+    return this.getInstance().broadcastWeight(weightData);
+  },
+
   getInstance() {
     if (!instance) {
       instance = new OutputManager();

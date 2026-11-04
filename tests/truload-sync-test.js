@@ -306,6 +306,23 @@ assert(silentWeight.scaleAStatus.connected === false, 'silence is reported per s
 stateForStatus.setScaleDataFlowing(true);
 ws.broadcastToRegistered = previousBroadcast;
 
+// ── Every module function main.js calls has to exist ─────────────────────────
+
+const fsForScan = require('fs');
+const mainSource = fsForScan.readFileSync(require('path').join(__dirname, '..', 'main.js'), 'utf8');
+const mainModules = {
+  OutputManager: require('../src/output/OutputManager'),
+  StateManager,
+  ConfigSyncService: require('../src/backend/ConfigSyncService'),
+  CredentialStore: require('../src/backend/CredentialStore'),
+  TenantLogin: require('../src/auth/TenantLogin')
+};
+Object.entries(mainModules).forEach(([name, mod]) => {
+  const calls = [...mainSource.matchAll(/\b([A-Za-z]+)\.([a-zA-Z]+)\(/g)];
+  const called = new Set(calls.filter((m) => m[1] === name).map((m) => m[2]));
+  called.forEach((fn) => assert(typeof mod[fn] === 'function', `main.js can call ${name}.${fn}`));
+});
+
 // ── Keepalive ─────────────────────────────────────────────────────────────────
 
 ws.config = { pingInterval: 30000, pingTimeout: 5000 };
