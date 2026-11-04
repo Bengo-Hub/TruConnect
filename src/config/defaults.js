@@ -220,7 +220,7 @@ module.exports = {
 
     // Portable axle scale 255-D WD2 console (Bluetooth serial, Yaohua Protocol 1)
     // Console settings: continuous automatic output, Yaohua Protocol 1, 19200 baud
-    // Frame format: STX "+00010001A" ETX — running vehicle total, updated by the console's Weighing button
+    // Frame format: STX "+00010001A" ETX: running vehicle total, updated by the console's Weighing button
     wd2: {
       enabled: false,
       type: 'serial',
@@ -239,7 +239,7 @@ module.exports = {
         dataBits: 8,
         parity: 'none',
         stopBits: 1,
-        queryCommand: ''              // Console sends frames unprompted — no query needed
+        queryCommand: ''              // Console sends frames unprompted, so no query is needed
       }
     },
 
