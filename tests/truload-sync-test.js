@@ -140,12 +140,105 @@ assert(lastSetup().plateNumber === 'KDA 123X' && lastSetup().axleConfigurationCo
 assert(StateManager.getAxleConfiguration().axleConfigurationId === 'cfg-2a', 'transaction sync keeps the axle config id');
 
 BackendClient.isAutoweighSent = () => true;
+BackendClient.shouldSendAutoweigh = () => false;
 BackendClient.hasSyncedTransaction = () => true;
 ws.handleVehicleComplete('s1', { totalAxles: 2, axleWeights: [80, 140], gvw: 220 });
 assert(lastSent('vehicle-complete-ack').data.success === true, 'vehicle complete from TruLoad is acknowledged');
 
 ws.handleResetSession('s1');
 assert(lastSetup().reset === true, 'session reset clears the mirrored setup');
+
+// ── Auto record first for a TruLoad transaction ──────────────────────────────
+
+const backend = BackendClient.getInstance();
+const setupOf = (workflow, { enabled = true, backendOn = true, online = true, sent = false, transactionId = 'txn-9' } = {}) => {
+  ConfigManager.set('autoWeigh.enabled', enabled, false);
+  backend.config.enabled = backendOn;
+  backend._lastKnownOnline = online;
+  backend.currentSession.weighingTransactionId = transactionId;
+  backend.currentSession.workflow = workflow;
+  backend.currentSession.isAutoweighSent = sent;
+};
+
+setupOf('enforcement');
+assert(backend.shouldSendAutoweigh() === true, 'enforcement with auto-weigh on and backend online sends the auto record');
+setupOf('enforcement', { enabled: false });
+assert(backend.shouldSendAutoweigh() === false, 'auto-weigh off sends nothing for a TruLoad transaction');
+setupOf('enforcement', { backendOn: false });
+assert(backend.shouldSendAutoweigh() === false, 'backend integration off sends nothing for a TruLoad transaction');
+setupOf('enforcement', { online: false });
+assert(backend.shouldSendAutoweigh() === false, 'backend offline sends nothing for a TruLoad transaction');
+setupOf('commercial');
+assert(backend.shouldSendAutoweigh() === false, 'commercial never sends an auto record');
+setupOf(undefined);
+assert(backend.shouldSendAutoweigh() === false, 'older TruLoad with no workflow sends nothing');
+setupOf('enforcement', { sent: true });
+assert(backend.shouldSendAutoweigh() === false, 'the auto record is only sent once');
+setupOf(undefined, { enabled: false, backendOn: false, online: false, transactionId: null });
+assert(backend.shouldSendAutoweigh() === true, 'with no TruLoad transaction TruConnect still sends, queued if offline');
+
+// Auto record goes out on the last axle, and TruLoad's axles survive for its final submit
+let autoweighSends = 0;
+BackendClient.sendAutoweigh = async () => { autoweighSends++; return { ticketNumber: 'TKT-1', weighingId: 'txn-9', gvwMeasuredKg: 220, captureStatus: 'auto' }; };
+BackendClient.shouldSendAutoweigh = () => backend.shouldSendAutoweigh();
+BackendClient.hasSyncedTransaction = () => backend.hasSyncedTransaction();
+BackendClient.isAutoweighSent = () => backend.isAutoweighSent();
+const previousGet = ConfigManager.get;
+ConfigManager.get = function (key, defaultValue) {
+  if (key === 'input.activeSource') return 'wd2';
+  return previousGet.call(this, key, defaultValue);
+};
+const session = StateManager.getInstance();
+session.reset();
+session.mode = 'mobile';
+session.lastScaleFrameAt = Date.now();
+StateManager.setAxleConfiguration({ expectedAxles: 2, plateNumber: 'KDA 123X' });
+setupOf('enforcement');
+StateManager.setCurrentMobileWeight(100, true);
+ws.handleAxleCaptured('s1', { axleNumber: 1 });
+assert(autoweighSends === 0, 'no auto record before the last axle');
+StateManager.setCurrentMobileWeight(250, true);
+ws.handleAxleCaptured('s1', { axleNumber: 2 });
+assert(autoweighSends === 1, 'auto record is sent on the last axle');
+
+(async () => {
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert(StateManager.getMobileState().axles.length === 2, 'TruLoad transaction keeps its axles after the auto record');
+assert(lastSent('autoweigh-submitted').data.ticketNumber === 'TKT-1', 'TruLoad is told the auto record ticket');
+ConfigManager.get = previousGet;
+
+// ── MCGS held total protection ────────────────────────────────────────────────
+
+ConfigManager.get = function (key, defaultValue) {
+  if (key === 'input.activeSource') return 'mcgs';
+  return previousGet.call(this, key, defaultValue);
+};
+assert(previousGet.call(ConfigManager, 'input.mcgs.holdsCumulativeTotal') === true, 'MCGS has the held total protection on');
+const mcgs = StateManager.getInstance();
+mcgs.reset();
+mcgs.lastRawCumulativeWeight = 0;
+mcgs.cumulativeBaseOffset = 0;
+const mcgsRead = (raw) => { StateManager.setCurrentMobileWeight(raw, true); return StateManager.getCurrentMobileWeight(); };
+assert(mcgsRead(940) === 940, 'MCGS axle 1 reads its own weight');
+StateManager.addAxleWeight(StateManager.getCurrentMobileWeight());
+assert(mcgsRead(500) === 0, 'MCGS dip below the total mid-vehicle reads 0');
+assert(mcgsRead(1580) === 640, 'MCGS axle 2 still subtracts axle 1 after a dip');
+StateManager.addAxleWeight(StateManager.getCurrentMobileWeight());
+StateManager.resetMobileSession();
+assert(mcgsRead(1580) === 0, 'MCGS total repeated after a session reset reads 0');
+assert(mcgsRead(0) === 0, 'MCGS console reset reads 0');
+assert(mcgsRead(700) === 700, 'MCGS next vehicle reads its own weight after the console reset');
+await new Promise((resolve) => setTimeout(resolve, 5));
+ConfigManager.get = previousGet;
+BackendClient.isAutoweighSent = () => true;
+BackendClient.shouldSendAutoweigh = () => false;
+
+// ── Further setup values ──────────────────────────────────────────────────────
+
+ws.handleUpdateConfig('s1', { totalAxles: 3, axleConfigurationCode: '3A', weighingType: 'tare' });
+assert(lastSetup().weighingType === 'tare', 'tare or gross choice is shared');
+ws.handleVehicleDetails('s1', { driver: 'J. Doe', transporter: 'Acme', cargo: 'Sand', origin: 'Athi', destination: 'Thika' });
+assert(lastSetup().vehicleDetails.driver === 'J. Doe' && lastSetup().vehicleDetails.destination === 'Thika', 'step 2 vehicle details are shared');
 
 // ── Driver instructions ───────────────────────────────────────────────────────
 
@@ -196,3 +289,4 @@ assert(weightMessage.data.scaleNotice === null, 'weight message shares the scale
 ConfigManager.get = originalGet;
 console.log('\nAll TruLoad sync tests complete.');
 process.exit();
+})();

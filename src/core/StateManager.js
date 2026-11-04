@@ -544,6 +544,17 @@ class StateManager {
   syncHeldTotal(total) {
     const ConfigManager = require('../config/ConfigManager');
     const activeSource = ConfigManager.get('input.activeSource');
+
+    // A total that also moves with the load (MCGS) can dip mid-vehicle, and may only be sent
+    // on request, so a cleared console may never show 0. Before any capture, only the exact
+    // total held at the reset reads 0. Anything else is a new total, so it can never under-read.
+    if (ConfigManager.get(`input.${activeSource}.liveCumulativeTotal`, false) === true) {
+      if (total !== this.cumulativeBaseOffset && this.mobileState.axles.length === 0) {
+        this.cumulativeBaseOffset = 0;
+      }
+      return;
+    }
+
     const maxGapMs = ConfigManager.get(`input.${activeSource}.heldTotalGapMs`, 5000);
     const now = Date.now();
     const framesInterrupted = this.lastScaleFrameAt === null || now - this.lastScaleFrameAt > maxGapMs;

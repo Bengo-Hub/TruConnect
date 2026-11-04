@@ -98,7 +98,7 @@ Source `wd2`, protocol `WD2`, parser `MobileScaleParser` in `wd2` mode.
   - A captured axle reads 0 immediately, so a second click before the next frame cannot store it twice.
 - A frame with a bad checksum is rejected and the last reading stays in place.
 
-MCGS uses `useCumulativeWeight` without `holdsCumulativeTotal`, so its behaviour is unchanged.
+MCGS also has `holdsCumulativeTotal`, with `liveCumulativeTotal` because its reading can move with the load and may only be sent on request. There, the only effect is that the exact total repeated after a session reset reads 0 until it changes. This has not been tested on MCGS hardware. If an MCGS console is not cleared between vehicles, the next vehicle's first axle still reads the running total.
 
 - Frames more than `heldTotalGapMs` apart (5 seconds by default) count as an interruption, and so does
   the first frame after TruConnect starts. If the total changed during the interruption, the frames

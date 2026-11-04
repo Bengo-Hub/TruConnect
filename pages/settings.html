@@ -2575,7 +2575,9 @@
               stop: stopCmd || 'STOP\\r\\n'
             }
           },
-          useCumulativeWeight: document.getElementById('mcgs-cumulative').checked
+          useCumulativeWeight: document.getElementById('mcgs-cumulative').checked,
+          holdsCumulativeTotal: true,
+          liveCumulativeTotal: true
         };
       } else if (source === 'giropes') {
         config.giropes = {

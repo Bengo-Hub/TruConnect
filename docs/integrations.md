@@ -1594,9 +1594,13 @@ TruLoad's weighing screens share their setup with TruConnect as the operator ent
 | Plate | As it is entered on the first step | `plate` |
 | Axle configuration | When selected, before a transaction exists | `update-config` |
 | Transaction, plate, axle configuration | Once the transaction exists | `transaction-sync` |
+| Tare or gross (commercial) | When the first weight is captured | `update-config` |
+| Driver, transporter, cargo, origin, destination | When selected on step 2. Shown read-only and not stored, as TruLoad's backend owns them | `vehicle-details` |
 | Clear the mirrored values | Session reset | `reset-session` |
 
-Commercial mobile weighing in TruLoad sets an axle count without picking a configuration, so the Axle Configuration field is not filled for that workflow.
+Commercial mobile weighing in TruLoad can pick an axle configuration, which sets the axle count, or set the count directly, which leaves the Axle Configuration field empty.
+
+TruLoad shows the ticket number from `autoweigh-submitted` when TruConnect sends an auto record. See [AUTO_WEIGH_FLOW.md](AUTO_WEIGH_FLOW.md) for when that happens.
 
 **Tenant and station binding**: the first TruLoad connection stores its org slug and station as `tenantBinding`. Each later connection is compared by org slug, ignoring case.
 

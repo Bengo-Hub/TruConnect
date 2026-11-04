@@ -1571,6 +1571,7 @@
             <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="multideck-change-vehicle-btn">Change Vehicle</button>
           </div>
           <div class="capture-hint hidden" id="multideck-setup-notice" role="alert"></div>
+          <div class="capture-hint hidden" id="multideck-truload-details"></div>
           <button type="button" class="btn btn-primary" style="width:100%;" id="multideck-start-weighing-btn">
             <i class="fas fa-play"></i> Start Weighing
           </button>
@@ -1742,6 +1743,7 @@
             <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="mobile-change-vehicle-btn">Change Vehicle</button>
           </div>
           <div class="capture-hint hidden" id="mobile-setup-notice" role="alert"></div>
+          <div class="capture-hint hidden" id="mobile-truload-details"></div>
           <button type="button" class="btn btn-primary" style="width:100%;" id="mobile-start-weighing-btn">
             <i class="fas fa-play"></i> Start Weighing
           </button>
@@ -2668,6 +2670,7 @@
           s.truloadFilled = false;
           resetWeighingSetup(prefix);
           showSetupNotice(prefix, '');
+          showTruLoadDetails(prefix, null);
         });
         return;
       }
@@ -2683,6 +2686,12 @@
       if (data.plateNumber) {
         els.plateInput.value = String(data.plateNumber).toUpperCase();
       }
+      if (data.weighingType && els.weighingTypeSelect) {
+        els.weighingTypeSelect.value = data.weighingType;
+      }
+      if (data.vehicleDetails) {
+        showTruLoadDetails(prefix, data.vehicleDetails);
+      }
 
       let notice = data.notice || '';
       if (data.axleConfigurationCode && els.axleConfigSelect) {
@@ -2694,10 +2703,20 @@
         }
       }
 
-      if (data.plateNumber || data.axleConfigurationCode || data.workflow) {
+      if (data.plateNumber || data.axleConfigurationCode || data.workflow || data.vehicleDetails) {
         s.truloadFilled = true;
       }
-      showSetupNotice(prefix, notice);
+      if (notice || !data.vehicleDetails) showSetupNotice(prefix, notice);
+    }
+
+    // Read-only: TruLoad's backend owns these, so they are not stored here
+    function showTruLoadDetails(prefix, details) {
+      const panel = document.getElementById(`${prefix}-truload-details`);
+      if (!panel) return;
+      const labels = { driver: 'Driver', transporter: 'Transporter', cargo: 'Cargo', origin: 'Origin', destination: 'Destination' };
+      const parts = Object.keys(labels).filter((key) => details && details[key]).map((key) => `${labels[key]}: ${details[key]}`);
+      panel.textContent = parts.length ? `From TruLoad. ${parts.join(' | ')}` : '';
+      panel.className = parts.length ? 'capture-hint' : 'capture-hint hidden';
     }
 
     function showDriverInstruction(data) {

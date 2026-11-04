@@ -173,6 +173,8 @@ module.exports = {
       type: 'serial',
       protocol: 'MCGS',
       useCumulativeWeight: true,      // MCGS accumulates gvw, so we subtract previous axles
+      holdsCumulativeTotal: true,     // Not tested on hardware: keeps a repeated total from reading as a new vehicle's axle
+      liveCumulativeTotal: true,      // Reading can move with the load and may only be sent on request
       metadata: {
         make: 'MCGS',                // Scale manufacturer
         model: 'Console',            // Scale/console model
@@ -231,7 +233,7 @@ module.exports = {
       metadata: {
         make: 'Portable axle scale',
         model: '255-D WD2',
-        capacity: 30000
+        capacity: 55000               // Weighs up to 7-axle trailers
       },
       serial: {
         port: 'COM5',                 // Outgoing Bluetooth port of the paired Serial Adaptor

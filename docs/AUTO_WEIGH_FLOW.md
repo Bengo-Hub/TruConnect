@@ -313,6 +313,18 @@ The system supports two-stage capture for accuracy:
 - `CaptureSource = "auto"`, `CaptureStatus = "auto"`
 - Stores `AutoweighGvwKg` and `AutoweighAt`
 
+When this stage runs depends on who owns the transaction:
+
+| Weighing | Auto record sent |
+|----------|------------------|
+| Started on TruConnect, no TruLoad transaction | Always. Queued while the backend is offline |
+| TruLoad transaction, enforcement | Only when `autoWeigh.enabled` is on, backend integration is on and the backend is reachable. Otherwise the record stays `pending` until the final capture |
+| TruLoad transaction, commercial | Never. Commercial weighing uses its own transaction endpoints |
+
+For a TruLoad transaction the auto record updates the `pending` record that TruLoad created, and TruConnect keeps its axles for the final submit. Mobile sends it after the last axle capture. Multideck sends it when the weights are taken, before the operator confirms them.
+
+A preliminary send that arrives after the final capture, for example from the offline queue, changes nothing.
+
 **Stage 2: Final (Manual Confirmation)**
 - Operator reviews and confirms weights
 - `CaptureSource = "frontend"`, `CaptureStatus = "captured"`

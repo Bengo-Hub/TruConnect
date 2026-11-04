@@ -286,6 +286,7 @@ class BackendClient {
       vehicleId: vehicleInfo.vehicleId || null,
       axleConfigurationId: vehicleInfo.axleConfigurationId || null,
       weighingMode: vehicleInfo.weighingMode || null,
+      workflow: vehicleInfo.workflow || null,
       isAutoweighSent: false,
       autoweighGvw: 0,
       // Fresh id for this physical weighing - groups its autoweigh+complete sync-queue rows.
@@ -779,6 +780,7 @@ class BackendClient {
     this.currentSession.weighingTransactionId = syncData.transactionId || null;
     this.currentSession.vehicleRegNumber = syncData.vehicleRegNumber || this.currentSession.vehicleRegNumber;
     this.currentSession.weighingMode = syncData.weighingMode || this.currentSession.weighingMode;
+    this.currentSession.workflow = syncData.workflow || this.currentSession.workflow;
 
     if (syncData.stationId) {
       this.config.stationId = syncData.stationId;
@@ -799,10 +801,27 @@ class BackendClient {
 
   /**
    * True when frontend has synced a weighing transaction (frontend-led flow).
-   * When set, middleware must not create/update via autoweigh; only frontend submits via capture-weights.
    */
   hasSyncedTransaction() {
     return Boolean(this.currentSession.weighingTransactionId);
+  }
+
+  /**
+   * Whether to send the preliminary auto record now.
+   *
+   * With no TruLoad transaction this device owns the record, and sends are queued while
+   * offline. For a TruLoad transaction the auto record comes first only when auto-weigh is
+   * enabled and the backend is reachable; TruLoad's submit then makes it captured. Commercial
+   * weighings use their own transaction endpoints, so they never send one.
+   */
+  shouldSendAutoweigh() {
+    if (this.currentSession.isAutoweighSent) return false;
+    if (!this.hasSyncedTransaction()) return true;
+
+    return ConfigManager.get('autoWeigh.enabled', false) === true &&
+      Boolean(this.config.enabled) &&
+      this._lastKnownOnline === true &&
+      this.currentSession.workflow === 'enforcement';
   }
 
   /**
@@ -938,6 +957,10 @@ BackendClient.getSession = function() {
 
 BackendClient.isAutoweighSent = function() {
   return BackendClient.getInstance().isAutoweighSent();
+};
+
+BackendClient.shouldSendAutoweigh = function() {
+  return BackendClient.getInstance().shouldSendAutoweigh();
 };
 
 BackendClient.hasSyncedTransaction = function() {

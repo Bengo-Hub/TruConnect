@@ -463,7 +463,8 @@ class ApiOutput extends EventEmitter {
         BackendClient.startSession({
           weighingTransactionId: data.transactionId,
           regNumber: data.vehicleRegNumber,
-          weighingMode: data.weighingMode
+          weighingMode: data.weighingMode,
+          workflow: data.workflow
         });
         if (data.totalAxles) {
           StateManager.setAxleConfiguration({
@@ -521,7 +522,7 @@ class ApiOutput extends EventEmitter {
         const mobileState = StateManager.getMobileState();
         const expectedAxles = StateManager.getAxleConfiguration().expectedAxles;
 
-        if (isComplete && !BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction()) {
+        if (isComplete && BackendClient.shouldSendAutoweigh()) {
           const axleConfig = StateManager.getAxleConfiguration();
           BackendClient.sendAutoweigh({
             plateNumber: axleConfig.plateNumber || StateManager.getInstance().currentPlate,
@@ -531,6 +532,8 @@ class ApiOutput extends EventEmitter {
             gvw: mobileState.gvw
           }).then(() => {}).catch(err => console.error('[ApiOutput] Autoweigh failed:', err.message))
             .finally(() => {
+              // A TruLoad transaction keeps its session until TruLoad's final submit resets it
+              if (BackendClient.hasSyncedTransaction()) return;
               StateManager.resetMobileSession();
               console.log('[ApiOutput] Weighing session reset after auto-weigh attempt');
             });
@@ -577,7 +580,7 @@ class ApiOutput extends EventEmitter {
         const axles = axleWeights.map((weight, index) => ({ axleNumber: index + 1, weight }));
         const gvwSum = gvw || axles.reduce((sum, a) => sum + a.weight, 0);
 
-        if (!BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction() && axles.length > 0) {
+        if (BackendClient.shouldSendAutoweigh() && axles.length > 0) {
           const axleConfig = StateManager.getAxleConfiguration();
           BackendClient.sendAutoweigh({
             plateNumber: axleConfig.plateNumber || plateNumber,
@@ -649,6 +652,12 @@ class ApiOutput extends EventEmitter {
       });
     });
 
+    // Step 2 details from TruLoad, shown on screen only (mirrors WebSocket vehicle-details)
+    router.post('/vehicle-details', (req, res) => {
+      EventBus.emit('truload:setup', { vehicleDetails: req.body || {} });
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    });
+
     // Driver instruction from TruLoad's capture screen (mirrors the WebSocket events)
     router.post('/driver-instruction', (req, res) => {
       const { instruction } = req.body || {};
@@ -666,9 +675,9 @@ class ApiOutput extends EventEmitter {
     // Update axle configuration (mirrors WebSocket update-config)
     router.post('/update-config', (req, res) => {
       try {
-        const { totalAxles, axleConfigurationCode } = req.body;
+        const { totalAxles, axleConfigurationCode, weighingType } = req.body;
         const sm = StateManager.getInstance();
-        EventBus.emit('truload:setup', { totalAxles, axleConfigurationCode });
+        EventBus.emit('truload:setup', { totalAxles, axleConfigurationCode, weighingType });
         if (totalAxles != null) {
           sm.axleConfig = {
             ...sm.axleConfig,

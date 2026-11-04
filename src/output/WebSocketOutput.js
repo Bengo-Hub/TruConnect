@@ -289,6 +289,10 @@ class WebSocketOutput extends EventEmitter {
           this.handleWeightsCaptured(clientId, data);
           break;
 
+        case 'vehicle-details':
+          this.handleVehicleDetails(clientId, data);
+          break;
+
         case 'enter':
         case 'move-forward':
         case 'move-back':
@@ -519,6 +523,19 @@ class WebSocketOutput extends EventEmitter {
   }
 
   /**
+   * Show TruLoad's step 2 details on the TruConnect screen. TruLoad's backend owns them,
+   * so they are not stored or submitted from here.
+   */
+  handleVehicleDetails(clientId, data) {
+    const client = this.clients.get(clientId);
+    if (!client || !client.registered) {
+      this.sendToClient(clientId, 'error', { message: 'Not registered' });
+      return;
+    }
+    EventBus.emit('truload:setup', { mode: client.mode, vehicleDetails: data || {} });
+  }
+
+  /**
    * Handle a driver instruction from TruLoad's capture screen
    */
   handleDriverInstruction(clientId, instruction) {
@@ -636,7 +653,8 @@ class WebSocketOutput extends EventEmitter {
     BackendClient.startSession({
       weighingTransactionId: data.transactionId,
       regNumber: data.vehicleRegNumber,
-      weighingMode: data.weighingMode
+      weighingMode: data.weighingMode,
+      workflow: data.workflow
     });
 
     // Update axle configuration if provided
@@ -730,8 +748,8 @@ class WebSocketOutput extends EventEmitter {
       gvw: mobileState.gvw
     });
 
-    // Auto-submit to backend when all axles are captured (standalone mode only; skip when frontend owns the transaction)
-    if (isComplete && !BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction()) {
+    // Send the auto record when all axles are captured. See BackendClient.shouldSendAutoweigh.
+    if (isComplete && BackendClient.shouldSendAutoweigh()) {
       console.log(`[AutoWeigh] All ${mobileState.axles.length} axles captured via WebSocket - sending auto-weigh to backend...`);
 
       const axleConfig = StateManager.getAxleConfiguration();
@@ -755,7 +773,8 @@ class WebSocketOutput extends EventEmitter {
       }).catch(err => {
         console.error('[AutoWeigh] Auto-weigh submission failed:', err.message);
       }).finally(() => {
-        // Always reset middleware weights for next weighing session (success or fail)
+        // A TruLoad transaction keeps its session until TruLoad's final submit resets it
+        if (BackendClient.hasSyncedTransaction()) return;
         StateManager.resetMobileSession();
         console.log('[AutoWeigh] Weighing session reset after auto-weigh attempt');
       });
@@ -814,8 +833,8 @@ class WebSocketOutput extends EventEmitter {
       weight: weight
     }));
 
-    // Auto-submit to backend (standalone mode only; skip when frontend owns the transaction)
-    if (!BackendClient.isAutoweighSent() && !BackendClient.hasSyncedTransaction() && axles.length > 0) {
+    // Send the auto record. See BackendClient.shouldSendAutoweigh.
+    if (BackendClient.shouldSendAutoweigh() && axles.length > 0) {
       console.log(`[AutoWeigh] Vehicle complete via WebSocket - sending auto-weigh to backend (${axles.length} axles, GVW=${gvw}kg)...`);
 
       const axleConfig = StateManager.getAxleConfiguration();
@@ -888,7 +907,7 @@ class WebSocketOutput extends EventEmitter {
     const client = this.clients.get(clientId);
     if (!client) return;
 
-    const { totalAxles, axleConfigurationCode } = data || {};
+    const { totalAxles, axleConfigurationCode, weighingType } = data || {};
     console.log(`[WebSocket] Config update from ${clientId}: ${axleConfigurationCode} (${totalAxles} axles)`);
 
     const sm = StateManager.getInstance();
@@ -900,7 +919,7 @@ class WebSocketOutput extends EventEmitter {
       };
     }
 
-    EventBus.emit('truload:setup', { mode: client.mode, totalAxles, axleConfigurationCode });
+    EventBus.emit('truload:setup', { mode: client.mode, totalAxles, axleConfigurationCode, weighingType });
 
     this.sendToClient(clientId, 'update-config-ack', {
       success: true,
