@@ -193,11 +193,11 @@ setTimeout(() => {
   capture();
   wait(30000);
   replay([frameHex('+00010001A')]);
-  assert(reading() === 0, `outage, total changed: never guesses a weight (got ${reading()})`);
-  assert(sm.scaleResyncRequired === true, 'outage, total changed: operator is asked to press Weighing again');
+  assert(reading() === 20, `pause, total rose: reads as the next axle (got ${reading()})`);
+  assert(sm.scaleResyncRequired === true, 'pause, total rose: operator is asked to check the console');
   wait(1000);
   replay([frameHex('+00022001B')]);
-  assert(reading() === 120, `outage: next press reads its own weight (got ${reading()})`);
+  assert(sm.scaleResyncRequired === false, 'pause: notice clears on the next new total');
 
   // Outage with nothing changed on the console keeps the uncaptured axle
   sm.reset();

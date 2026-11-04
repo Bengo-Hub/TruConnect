@@ -537,9 +537,9 @@ class StateManager {
   /**
    * Keep the subtraction base in step with a console that holds its total.
    *
-   * After an outage mid-vehicle, a changed total could mean a Weighing press, a Clear, or
-   * both, and the frames cannot say which. The new total becomes the base so the reading
-   * is 0 rather than a guess, and the operator presses Weighing again for that axle.
+   * Frames can pause and resume mid-vehicle. A total that rose meanwhile is nearly always a
+   * Weighing press, so it reads normally, with a notice because a Clear during the pause
+   * would make that reading low. A total that fell means the console was cleared.
    */
   syncHeldTotal(total) {
     const ConfigManager = require('../config/ConfigManager');
@@ -563,11 +563,11 @@ class StateManager {
 
     // With nothing captured there is nothing to corrupt, so the real total is shown. A base
     // only exists mid-vehicle or after a session reset, where a guess could record a wrong axle.
-    if (framesInterrupted && totalChanged && this.cumulativeBaseOffset > 0) {
-      this.cumulativeBaseOffset = total;
-      this.scaleResyncRequired = total > 0;
-      this.weighingPressesSinceCapture = 0;
-      console.warn(`[StateManager] Scale frames were interrupted and the total changed to ${total}kg - base reset, reading 0kg until the next Weighing press`);
+    if (framesInterrupted && totalChanged && this.cumulativeBaseOffset > 0 && total > this.cumulativeBaseOffset) {
+      this.lastRawCumulativeWeight = total;
+      this.scaleResyncRequired = true;
+      this.weighingPressesSinceCapture = 1;
+      console.warn(`[StateManager] Scale frames were interrupted and the total changed to ${total}kg - check the console's axle list`);
       return;
     }
 
@@ -599,7 +599,7 @@ class StateManager {
    */
   getScaleNotice() {
     if (this.scaleResyncRequired) {
-      return 'The scale connection was interrupted and its total changed. Press Weighing on the console again for this axle.';
+      return "The scale connection was interrupted and its total changed. Check this reading against the console's axle list before capturing.";
     }
     if (this.weighingPressesSinceCapture >= 2) {
       return `Weighing was pressed ${this.weighingPressesSinceCapture} times since the last capture. Check the console's axle list before capturing, as this reading may include more than one axle.`;

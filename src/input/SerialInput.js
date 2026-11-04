@@ -46,11 +46,33 @@ class SerialInput extends EventEmitter {
    */
   checkSilence(now = Date.now()) {
     if (!this.silenceAfterMs || !this.isConnected) return;
-    const lastHeard = this.lastDataTime ? this.lastDataTime.getTime() : this.openedAt;
-    if (!this.isSilent && lastHeard && now - lastHeard > this.silenceAfterMs) {
+    const lastHeard = Math.max(this.lastDataTime ? this.lastDataTime.getTime() : 0, this.openedAt || 0);
+    if (!lastHeard || now - lastHeard <= this.silenceAfterMs) return;
+
+    if (!this.isSilent) {
       this.isSilent = true;
       console.warn(`[SerialInput] ${this.config.port} is open but no data for ${Math.round((now - lastHeard) / 1000)}s`);
       this.emit('silent');
+    }
+    this.reopen();
+  }
+
+  /**
+   * A Bluetooth serial link can stop delivering while the port stays open, and opening the
+   * port again brings the data back. Keeps trying each time the silence window passes.
+   */
+  async reopen() {
+    if (this.isReopening) return;
+    this.isReopening = true;
+    console.log(`[SerialInput] Reopening ${this.config.port} to recover the data`);
+    try {
+      await this.stop();
+      await this.start();
+    } catch (error) {
+      console.error(`[SerialInput] Reopen failed: ${error.message}`);
+      this.scheduleReconnect();
+    } finally {
+      this.isReopening = false;
     }
   }
 
@@ -90,6 +112,7 @@ class SerialInput extends EventEmitter {
         this.serialPort.on('open', () => {
           console.log(`Serial port ${this.config.port} opened`);
           this.isConnected = true;
+          this.isStopping = false;
           this.openedAt = Date.now();
           if (this.silenceAfterMs && !this.silenceTimer) {
             this.silenceTimer = setInterval(() => this.checkSilence(), 2000);
@@ -114,7 +137,7 @@ class SerialInput extends EventEmitter {
           console.log(`Serial port ${this.config.port} closed`);
           this.isConnected = false;
           this.emit('disconnected');
-          this.scheduleReconnect();
+          if (!this.isStopping) this.scheduleReconnect();
         });
 
         // Open the port
@@ -135,6 +158,7 @@ class SerialInput extends EventEmitter {
    */
   async stop() {
     this.clearReconnect();
+    this.isStopping = true;
     if (this.silenceTimer) {
       clearInterval(this.silenceTimer);
       this.silenceTimer = null;

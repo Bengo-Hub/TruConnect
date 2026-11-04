@@ -100,11 +100,12 @@ Source `wd2`, protocol `WD2`, parser `MobileScaleParser` in `wd2` mode.
 
 MCGS also has `holdsCumulativeTotal`, with `liveCumulativeTotal` because its reading can move with the load and may only be sent on request. There, the only effect is that the exact total repeated after a session reset reads 0 until it changes. This has not been tested on MCGS hardware. If an MCGS console is not cleared between vehicles, the next vehicle's first axle still reads the running total.
 
-- Frames more than `heldTotalGapMs` apart (5 seconds by default) count as an interruption. If the total
-  changed during an interruption mid-vehicle, the frames cannot show whether Weighing or Clear was
-  pressed. The new total becomes the base, the reading stays at 0 and the screen asks the operator to
-  press Weighing again for that axle. The console's own axle list then shows that axle twice, while
-  TruConnect records it once.
+- Frames sometimes stop while the port stays open. After 10 seconds with no data, TruConnect reopens
+  the port and keeps trying, and both apps show the scale as disconnected until data returns.
+- Frames more than `heldTotalGapMs` apart (5 seconds by default) count as an interruption. A total that
+  rose during an interruption mid-vehicle reads normally, with a notice to check the console's axle
+  list, because a Clear during the pause would make that reading low. A total that fell means the
+  console was cleared.
 - With no axles captured yet, the reading is the console's real total, including right after a start.
   Press Clear on the console before weighing a new vehicle, so that total starts from 0.
 - Axle captures below `thresholds.mobile.minCaptureWeight` are rejected on the capture screen, WebSocket
