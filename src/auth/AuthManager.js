@@ -191,6 +191,29 @@ class AuthManager {
   }
 
   /**
+   * Save a TruLoad user's last good password as a salted hash, for signing in during an outage
+   */
+  saveTenantUser(email, password, role = 'operator') {
+    try {
+      const passwordHash = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
+      const address = email.toLowerCase();
+      const existing = this.db.get('SELECT id FROM users WHERE email = ?', [address]);
+      if (existing) {
+        this.db.run(
+          'UPDATE users SET password_hash = ?, role = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [passwordHash, role, existing.id]
+        );
+      } else {
+        this.db.run('INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)', [address, passwordHash, role]);
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Save tenant user error:', error);
+      return { success: false, error: 'Could not save the login on this device' };
+    }
+  }
+
+  /**
    * Change user password
    */
   async changePassword(userId, oldPassword, newPassword) {
@@ -398,6 +421,10 @@ module.exports = {
 
   login(email, password, rememberMe) {
     return this.getInstance().login(email, password, rememberMe);
+  },
+
+  saveTenantUser(email, password, role) {
+    return this.getInstance().saveTenantUser(email, password, role);
   },
 
   logout(token) {

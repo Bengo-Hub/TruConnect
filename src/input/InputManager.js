@@ -248,11 +248,15 @@ class InputManager {
       baudRate: serialConfig.baudRate || 9600,
       dataBits: serialConfig.dataBits || 8,
       parity: serialConfig.parity || 'none',
-      stopBits: serialConfig.stopBits || 1
+      stopBits: serialConfig.stopBits || 1,
+      // Sources with no query command send on their own, so silence means something is wrong
+      silenceAfterMs: serialConfig.queryCommand ? 0 : 10000
     });
 
     this.activeInput.on('data', this._handleData);
     this.activeInput.on('error', this._handleError);
+    this.activeInput.on('silent', () => EventBus.emit('input:silent', { port: serialConfig.port }));
+    this.activeInput.on('resumed', () => EventBus.emit('input:resumed', { port: serialConfig.port }));
 
     // Store query command for polling
     this.queryCommand = serialConfig.queryCommand || null;
@@ -528,6 +532,10 @@ class InputManager {
 
     try {
       const result = this.activeParser.parse(data);
+
+      if (!result && this.activeSource === 'wd2') {
+        console.warn(`[InputManager] WD2 frame rejected: ${Buffer.from(String(data), 'latin1').toString('hex')}`);
+      }
 
       if (result) {
         // Handle array of results (multi-deck)

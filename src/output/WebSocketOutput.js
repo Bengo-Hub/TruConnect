@@ -372,6 +372,7 @@ class WebSocketOutput extends EventEmitter {
       mode: data.mode || 'mobile',
       workflow: data.workflow,
       stationCode: binding.status === 'unverified' ? undefined : ConfigManager.get('station.code'),
+      stationName: binding.status === 'unverified' ? undefined : ConfigManager.get('station.name'),
       notice: binding.message
     });
 
@@ -422,13 +423,8 @@ class WebSocketOutput extends EventEmitter {
     if (captureMode === 'mobile' || data.mode === 'mobile') {
       const mobileState = StateManager.getMobileState ? StateManager.getMobileState() : {};
       const currentWeight = StateManager.getCurrentMobileWeight ? StateManager.getCurrentMobileWeight() : 0;
-      this.sendToClient(clientId, 'weight', {
-        mode: 'mobile',
-        weight: currentWeight,
-        stable: true,
-        session: mobileState,
-        source: 'initial'
-      });
+      // The full message, so a client sees the scale's status even while no frames are arriving
+      this.broadcastWeight({ currentWeight, stable: true, source: 'initial', session: mobileState }, 'mobile');
     } else {
       const weights = StateManager.getWeights();
       this.sendToClient(clientId, 'weights', weights);
@@ -1035,6 +1031,14 @@ class WebSocketOutput extends EventEmitter {
   }
 
   /**
+   * A reply is only due after each ping, so a healthy client's last pong can be a full
+   * ping interval old. Stale means it missed the reply to the latest ping.
+   */
+  isClientStale(client, now) {
+    return Boolean(client.lastPong) && now - client.lastPong > this.config.pingInterval + this.config.pingTimeout;
+  }
+
+  /**
    * Start ping interval for keepalive
    */
   startPingInterval() {
@@ -1044,7 +1048,7 @@ class WebSocketOutput extends EventEmitter {
 
       for (const [clientId, client] of this.clients) {
         // Check for stale connections
-        if (client.lastPong && now - client.lastPong > this.config.pingTimeout * 2) {
+        if (this.isClientStale(client, now)) {
           console.log(`Client ${clientId} timed out`);
           client.ws.terminate();
           this.clients.delete(clientId);

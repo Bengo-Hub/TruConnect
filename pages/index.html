@@ -2347,6 +2347,10 @@
         const latestNotice = data.scaleNotice ?? null;
         const stillBelowMinimum = captureBelowMinimum && currentWeight < minCaptureWeight;
         if (latestNotice !== scaleNotice || stillBelowMinimum !== captureBelowMinimum) {
+          // The capture hint is hidden until a weighing starts, so show the notice in setup too
+          if (latestNotice !== scaleNotice && !weighingSetup.mobile.started) {
+            showSetupNotice('mobile', latestNotice || '');
+          }
           scaleNotice = latestNotice;
           captureBelowMinimum = stillBelowMinimum;
           updateCaptureHint('mobile');
@@ -2661,6 +2665,9 @@
       if (!data) return;
       if (data.stationCode && elements.stationCode) {
         elements.stationCode.textContent = data.stationCode;
+      }
+      if (data.stationName && elements.stationName) {
+        elements.stationName.textContent = data.stationName;
       }
 
       if (data.reset) {

@@ -106,7 +106,20 @@ class BackendClient {
    * Authenticate with backend using email/password → JWT token
    * @returns {boolean} true if authentication succeeded
    */
-  async authenticate() {
+  /**
+   * Start-up triggers this from several places at once. They share one request, as
+   * parallel logins for one user have returned 500 from the backend.
+   */
+  authenticate() {
+    if (!this._authenticating) {
+      this._authenticating = this._authenticateOnce().finally(() => {
+        this._authenticating = null;
+      });
+    }
+    return this._authenticating;
+  }
+
+  async _authenticateOnce() {
     if (!this.config.baseUrl || !this.config.email || !this.config.password) {
       console.log('[BackendClient] Cannot authenticate - missing baseUrl, email, or password');
       return false;
@@ -844,6 +857,80 @@ class BackendClient {
   /**
    * Internal fetch wrapper with timeout
    */
+  /**
+   * Selects the tenant's database on the backend, for a device signed in with a tenant account
+   */
+  _tenantHeaders() {
+    const orgSlug = ConfigManager.get('tenantLogin.orgSlug', null);
+    if (!orgSlug) return {};
+    return {
+      'X-Org-Slug': orgSlug,
+      'X-Env': ConfigManager.get('tenantLogin.environment', 'live') === 'test' ? 'test' : 'live'
+    };
+  }
+
+  /**
+   * Check a TruLoad user's password. Nothing on this device changes here.
+   * @returns {Promise<Object>} tokens and user on success, or an error; unreachable when the
+   *   backend could not be asked at all, which is different from a refused password
+   */
+  async loginUser({ email, password, orgSlug, environment }) {
+    const headers = { 'Content-Type': 'application/json', 'X-Org-Slug': orgSlug, 'X-Env': environment === 'test' ? 'test' : 'live' };
+    let response;
+    try {
+      response = await this._fetch(`${this.config.baseUrl}${this.config.authEndpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email, password }),
+        timeout: 10000
+      });
+    } catch (error) {
+      return { success: false, unreachable: true, error: error.message };
+    }
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status >= 500) {
+        return { success: false, unreachable: true, error: `Backend error ${response.status}` };
+      }
+      return { success: false, error: body.message || body.error || 'Invalid email or password' };
+    }
+    if (!body.accessToken) {
+      return { success: false, error: 'This account needs a two-factor code, which TruConnect does not support yet. Use an account without two-factor sign-in.' };
+    }
+
+    let orgName = null;
+    try {
+      const org = await this._fetch(`${this.config.baseUrl}/api/v1/organizations/current`, {
+        headers: { ...headers, Authorization: `Bearer ${body.accessToken}` },
+        timeout: 10000
+      });
+      if (org.ok) orgName = (await org.json()).name || null;
+    } catch (error) {
+      console.warn('[BackendClient] Could not read the organization name:', error.message);
+    }
+
+    return { success: true, accessToken: body.accessToken, refreshToken: body.refreshToken, expiresIn: body.expiresIn, user: body.user, orgName };
+  }
+
+  /**
+   * Use tokens from a login that just succeeded, and tell the app the backend is reachable
+   */
+  useSession({ accessToken, refreshToken, expiresIn }) {
+    this.auth.accessToken = accessToken;
+    this.auth.refreshToken = refreshToken;
+    this.auth.expiresAt = new Date(Date.now() + ((expiresIn || 3600) - 300) * 1000);
+    this.isConnected = true;
+    this._recordConnectionState(true);
+    this.eventBus.emitEvent('backend:authenticated', { email: this.config.email });
+  }
+
+  clearCredentials() {
+    this.config.password = '';
+    this.auth = { accessToken: null, refreshToken: null, expiresAt: null };
+    this.isConnected = false;
+  }
+
   async _fetch(url, options = {}) {
     const timeout = options.timeout || this.config.timeout;
 
@@ -853,6 +940,7 @@ class BackendClient {
     try {
       const response = await fetch(url, {
         ...options,
+        headers: { ...this._tenantHeaders(), ...options.headers },
         signal: controller.signal
       });
       return response;

@@ -100,11 +100,13 @@ Source `wd2`, protocol `WD2`, parser `MobileScaleParser` in `wd2` mode.
 
 MCGS also has `holdsCumulativeTotal`, with `liveCumulativeTotal` because its reading can move with the load and may only be sent on request. There, the only effect is that the exact total repeated after a session reset reads 0 until it changes. This has not been tested on MCGS hardware. If an MCGS console is not cleared between vehicles, the next vehicle's first axle still reads the running total.
 
-- Frames more than `heldTotalGapMs` apart (5 seconds by default) count as an interruption, and so does
-  the first frame after TruConnect starts. If the total changed during the interruption, the frames
-  cannot show whether Weighing or Clear was pressed. The new total becomes the base, the reading stays
-  at 0 and the capture screen asks the operator to press Weighing again for that axle. The console's
-  own axle list then shows that axle twice, while TruConnect records it once.
+- Frames more than `heldTotalGapMs` apart (5 seconds by default) count as an interruption. If the total
+  changed during an interruption mid-vehicle, the frames cannot show whether Weighing or Clear was
+  pressed. The new total becomes the base, the reading stays at 0 and the screen asks the operator to
+  press Weighing again for that axle. The console's own axle list then shows that axle twice, while
+  TruConnect records it once.
+- With no axles captured yet, the reading is the console's real total, including right after a start.
+  Press Clear on the console before weighing a new vehicle, so that total starts from 0.
 - Axle captures below `thresholds.mobile.minCaptureWeight` are rejected on the capture screen, WebSocket
   and API paths. The default is 50 kg, set under Settings, Thresholds. Multideck readings are exempt.
 
@@ -122,7 +124,6 @@ MCGS also has `holdsCumulativeTotal`, with `liveCumulativeTotal` because its rea
   total rises once per press, even for two axles of equal weight, so TruConnect and TruLoad show a
   warning. Capture stays allowed because the frames cannot show whether the presses were two axles or
   one axle weighed twice.
-- **Weighing pressed before TruConnect starts:** that axle reads 0 until Weighing is pressed again.
 - **Pad weights:** `scaleA` and `scaleB` are an even split of the axle weight, not the real pad values.
 - **XOR checksum:** two corrupted bytes with the same error cancel out and pass. For example, a frame
   corrupted to `+00099001B` would read as 990 kg.

@@ -62,6 +62,8 @@ const InputManager = require('./src/input/InputManager');
 const BackendClient = require('./src/backend/BackendClient');
 const SyncQueue = require('./src/backend/SyncQueue');
 const ConfigSyncService = require('./src/backend/ConfigSyncService');
+const CredentialStore = require('./src/backend/CredentialStore');
+const TenantLogin = require('./src/auth/TenantLogin');
 
 // Keep serialout for RDU communication (legacy, will be replaced)
 const RDUCommunicator = require('./serialout');
@@ -279,13 +281,20 @@ async function initializeApp() {
     // Initialize BackendClient for TruLoad backend communication
     console.log('Initializing backend client...');
     const backendConfig = ConfigManager.get('backend') || {};
+
+    // Older versions saved this password in plain text
+    if (backendConfig.password && !CredentialStore.isProtected(backendConfig.password)) {
+      const encrypted = CredentialStore.protect(backendConfig.password);
+      if (encrypted) ConfigManager.set('backend.password', encrypted);
+    }
+
     BackendClient.initialize({
       enabled: backendConfig.enabled || false,
       baseUrl: backendConfig.baseUrl || '',
       authEndpoint: backendConfig.authEndpoint || '/api/v1/auth/login',
       autoweighEndpoint: backendConfig.autoweighEndpoint || '/api/v1/weighing-transactions/autoweigh',
       email: backendConfig.email || '',
-      password: backendConfig.password || '',
+      password: CredentialStore.reveal(backendConfig.password),
       stationId: ConfigManager.get('station.id'),
       bound: ConfigManager.get('station.bound') || 'A'
     });
@@ -316,6 +325,13 @@ async function initializeApp() {
     // starts up fully offline. Periodic cadence: every 6h (slow-moving reference data),
     // plus on-demand (Settings "Sync Now") and on the backend:online reconnect edge
     // (wired inside ConfigSyncService itself).
+    const rememberedUser = TenantLogin.restoredUser();
+    if (rememberedUser) {
+      isAuthenticated = true;
+      currentUser = rememberedUser;
+      console.log(`Signed in as ${rememberedUser.email} (${rememberedUser.orgSlug})`);
+    }
+
     console.log('Initializing config sync service...');
     ConfigSyncService.initialize({ periodicIntervalMs: 6 * 60 * 60 * 1000 });
     if (backendConfig.enabled && backendConfig.baseUrl) {
@@ -790,6 +806,24 @@ EventBus.on('client:registered', (data) => {
   }
 });
 
+// The port can stay open with nothing arriving, which "Connected" alone would hide
+EventBus.on('input:silent', ({ port }) => {
+  StateManager.getInstance().setScaleDataFlowing(false);
+  OutputManager.broadcastWeight({ currentWeight: StateManager.getCurrentMobileWeight(), stable: true, source: 'silent' });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('truload:setup-updated', {
+      notice: `No data is arriving from the scale on ${port}. Check the console is on and in range, and that no other program is using the port.`
+    });
+  }
+});
+
+EventBus.on('input:resumed', () => {
+  StateManager.getInstance().setScaleDataFlowing(true);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('truload:setup-updated', { notice: '' });
+  }
+});
+
 // Setup values from TruLoad, shown in the Weighing Setup section
 EventBus.on('truload:setup', (data) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -951,7 +985,10 @@ ipcMain.handle('open-settings', async () => {
 });
 
 ipcMain.handle('get-settings', async () => {
-  return ConfigManager.getInstance().export();
+  // Pages never receive the saved password. Saving with the field empty keeps it.
+  const settings = JSON.parse(JSON.stringify(ConfigManager.getInstance().export()));
+  if (settings.backend) settings.backend.password = '';
+  return settings;
 });
 
 ipcMain.handle('save-settings', async (event, settings) => {
@@ -975,6 +1012,16 @@ ipcMain.handle('save-settings', async (event, settings) => {
     // Capture current state BEFORE importing (for comparison later)
     const previousSimEnabled = ConfigManager.get('simulation.enabled', false);
     const previousActiveSource = ConfigManager.get('input.activeSource', 'none');
+
+    const enteredPassword = settings.backend?.password;
+    if (settings.backend) {
+      const encrypted = CredentialStore.protect(enteredPassword);
+      if (encrypted) {
+        settings.backend.password = encrypted;
+      } else {
+        delete settings.backend.password;
+      }
+    }
 
     // Import settings into config manager (persists to database)
     ConfigManager.getInstance().import(settings);
@@ -1052,7 +1099,7 @@ ipcMain.handle('save-settings', async (event, settings) => {
     // 7. Update backend integration
     if (settings.backend) {
       const BackendClient = require('./src/backend/BackendClient');
-      BackendClient.configure(settings.backend);
+      BackendClient.configure({ ...settings.backend, password: enteredPassword });
 
       // Restart the connectivity poll so the next tick re-evaluates from scratch
       // instead of waiting out whatever was left of the previous interval.
@@ -1108,7 +1155,7 @@ ipcMain.handle('test-backend-connection', async (event, config) => {
       baseUrl: config.baseUrl,
       authEndpoint: config.authEndpoint || '/api/v1/auth/login',
       email: config.email,
-      password: config.password
+      password: config.password || CredentialStore.reveal(ConfigManager.get('backend.password', ''))
     });
 
     // Try to authenticate
@@ -1252,14 +1299,18 @@ ipcMain.handle('cloud:disconnect', async () => {
 });
 
 // Authentication handlers
-ipcMain.handle('auth:login', async (event, { email, password, rememberMe }) => {
+ipcMain.handle('auth:login', async (event, { email, password, rememberMe, orgSlug, environment }) => {
   try {
-    const AuthManager = require('./src/auth/AuthManager');
-    const result = await AuthManager.login(email, password);
+    const result = await TenantLogin.login({ email, password, rememberMe, orgSlug, environment });
 
     if (result.success) {
       isAuthenticated = true;
       currentUser = result.user;
+      if (orgSlug && !result.offline) {
+        ConfigSyncService.runSync().catch((error) => {
+          console.warn('[TenantLogin] Config sync after login failed:', error.message);
+        });
+      }
       // Close login window and show main window if needed
       if (loginWindow) {
         loginWindow.close();
@@ -1282,6 +1333,7 @@ ipcMain.handle('auth:logout', async () => {
   try {
     const AuthManager = require('./src/auth/AuthManager');
     await AuthManager.logout();
+    TenantLogin.logout();
     isAuthenticated = false;
     currentUser = null;
     return { success: true };
@@ -1299,9 +1351,7 @@ ipcMain.handle('auth:check-session', async () => {
 
 // Get saved credentials (for "Remember Me" feature)
 ipcMain.handle('auth:get-saved-credentials', async () => {
-  // For now, return null - "Remember Me" could be implemented with electron-store
-  // or by storing encrypted credentials in the database
-  return null;
+  return TenantLogin.savedLogin();
 });
 
 // Mobile scale handlers

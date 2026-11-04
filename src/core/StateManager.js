@@ -537,7 +537,7 @@ class StateManager {
   /**
    * Keep the subtraction base in step with a console that holds its total.
    *
-   * After a restart or outage a changed total could mean a Weighing press, a Clear, or
+   * After an outage mid-vehicle, a changed total could mean a Weighing press, a Clear, or
    * both, and the frames cannot say which. The new total becomes the base so the reading
    * is 0 rather than a guess, and the operator presses Weighing again for that axle.
    */
@@ -561,7 +561,9 @@ class StateManager {
     const totalChanged = total !== this.lastRawCumulativeWeight;
     this.lastScaleFrameAt = now;
 
-    if (framesInterrupted && totalChanged) {
+    // With nothing captured there is nothing to corrupt, so the real total is shown. A base
+    // only exists mid-vehicle or after a session reset, where a guess could record a wrong axle.
+    if (framesInterrupted && totalChanged && this.cumulativeBaseOffset > 0) {
       this.cumulativeBaseOffset = total;
       this.scaleResyncRequired = total > 0;
       this.weighingPressesSinceCapture = 0;
@@ -581,6 +583,15 @@ class StateManager {
     if (total < this.cumulativeBaseOffset) {
       this.cumulativeBaseOffset = 0;
     }
+  }
+
+  /**
+   * Record whether the scale is sending. An open port with nothing arriving is not connected.
+   */
+  setScaleDataFlowing(flowing) {
+    this.inputSource = { ...this.inputSource, connected: flowing };
+    this.scaleConnections.scaleA.connected = flowing;
+    this.scaleConnections.scaleB.connected = flowing;
   }
 
   /**

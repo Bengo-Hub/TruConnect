@@ -1613,6 +1613,17 @@ TruLoad shows the ticket number from `autoweigh-submitted` when TruConnect sends
 
 API polling has no registration step, so `POST /transaction-sync` carries the org slug and returns `409` with code `ORG_MISMATCH` for a different org. `GET /weights` is not checked.
 
+**Signing in with a TruLoad account**: the login screen takes an organization, a Live or Test environment, and the user's TruLoad email and password. The password is checked by `POST /api/v1/auth/login` with `X-Org-Slug` and `X-Env`, which select the tenant's database. Every later backend call sends the same headers.
+
+- On success the device stores the org, environment and email, turns demo mode off and backend integration on, and uses this login for sync and auto records.
+- The password is encrypted with Electron `safeStorage` as `backend.password`. If encryption is unavailable it is not saved. Pages never receive it, and leaving the settings field empty keeps the saved value.
+- A salted hash in the local users table allows sign-in during an outage, using the last password that worked online.
+- Accounts needing a two-factor code cannot sign in here yet.
+- With no organization entered, local TruConnect accounts work as before.
+- The environment must match TruLoad's: `kuraweightest.masterspace.co.ke` uses Test.
+
+`WEIGHING_OPERATOR` has `config.read`, `station.read`, `weighing.read` and `weighing.webhook` for this. Other roles without them can sign in, but sync or auto records are refused.
+
 **Driver instructions**: `enter`, `move-forward`, `move-back` and `stop` are acknowledged with `driver-instruction-ack`, logged, and shown on the TruConnect screen. Text for the RDUs is held in `rdu.driverInstructions` and is not sent, because the configured KELI panels are numeric.
 
 ---

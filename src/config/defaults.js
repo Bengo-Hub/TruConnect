@@ -102,6 +102,16 @@ module.exports = {
     }
   },
 
+  // The TruLoad account this device signs in with. The password is in backend.password,
+  // encrypted by CredentialStore.
+  tenantLogin: {
+    orgSlug: null,
+    environment: 'live',                     // 'live' | 'test': selects the backend database
+    email: null,
+    orgName: null,
+    remember: false
+  },
+
   // Tenant and station this device belongs to, set by the first TruLoad connection
   tenantBinding: {
     orgSlug: null,

@@ -325,6 +325,8 @@ For a TruLoad transaction the auto record updates the `pending` record that TruL
 
 A preliminary send that arrives after the final capture, for example from the offline queue, changes nothing.
 
+The auto record stores the weights and the compliance result. Enforcement actions (case register, yard entry, prohibition order, tag holds and their notifications) wait for the final capture, so none rest on weights the operator has not confirmed. An overloaded weighing abandoned before the final capture keeps its auto record and raises no case, so `auto` records need reviewing.
+
 **Stage 2: Final (Manual Confirmation)**
 - Operator reviews and confirms weights
 - `CaptureSource = "frontend"`, `CaptureStatus = "captured"`

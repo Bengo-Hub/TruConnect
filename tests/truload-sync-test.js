@@ -240,6 +240,59 @@ assert(lastSetup().weighingType === 'tare', 'tare or gross choice is shared');
 ws.handleVehicleDetails('s1', { driver: 'J. Doe', transporter: 'Acme', cargo: 'Sand', origin: 'Athi', destination: 'Thika' });
 assert(lastSetup().vehicleDetails.driver === 'J. Doe' && lastSetup().vehicleDetails.destination === 'Thika', 'step 2 vehicle details are shared');
 
+// ── Open port with nothing arriving ───────────────────────────────────────────
+
+const SerialInput = require('../src/input/SerialInput');
+const serial = new SerialInput({ port: 'COM4', silenceAfterMs: 10000 });
+const serialEvents = [];
+serial.on('silent', () => serialEvents.push('silent'));
+serial.on('resumed', () => serialEvents.push('resumed'));
+serial.isConnected = true;
+serial.openedAt = 1000;
+serial.checkSilence(5000);
+assert(serialEvents.length === 0, 'no silence reported inside the window');
+serial.checkSilence(12000);
+assert(serialEvents.join() === 'silent', 'silence reported once past the window');
+serial.checkSilence(20000);
+assert(serialEvents.join() === 'silent', 'silence reported only once');
+serial.noteDataReceived(Buffer.from([2, 3]));
+assert(serialEvents.join() === 'silent,resumed', 'recovery is reported when data returns');
+const polled = new SerialInput({ port: 'COM4' });
+polled.isConnected = true;
+polled.openedAt = 1000;
+polled.on('silent', () => assert(false, 'query-driven devices are not watched'));
+polled.checkSilence(60000);
+
+// ── A client connecting while no frames are arriving ─────────────────────────
+
+const statusMessages = [];
+const previousBroadcast = ws.broadcastToRegistered;
+ws.broadcastToRegistered = (type, data) => { if (type === 'weight') statusMessages.push(data); };
+const stateForStatus = StateManager.getInstance();
+stateForStatus.setInputSource({ name: 'wd2', protocol: 'WD2', connectionType: 'serial', connected: true });
+stateForStatus.currentMobileWeight = 60;
+connect('s2');
+register('s2', { orgSlug: 'acme', stationCode: 'ACME-1', mode: 'mobile' });
+const firstWeight = statusMessages[0];
+assert(firstWeight && firstWeight.weight === 60, 'a new client gets the current weight straight away');
+assert(firstWeight.connection && firstWeight.connection.connected === true, 'a new client gets the connection status');
+assert(firstWeight.scaleAStatus && firstWeight.scaleBStatus, 'a new client gets both scale statuses');
+stateForStatus.setScaleDataFlowing(false);
+ws.broadcastWeight({ currentWeight: 60 }, 'mobile');
+const silentWeight = statusMessages[statusMessages.length - 1];
+assert(silentWeight.connection.connected === false, 'silence is reported as not connected');
+assert(silentWeight.scaleAStatus.connected === false, 'silence is reported per scale');
+stateForStatus.setScaleDataFlowing(true);
+ws.broadcastToRegistered = previousBroadcast;
+
+// ── Keepalive ─────────────────────────────────────────────────────────────────
+
+ws.config = { pingInterval: 30000, pingTimeout: 5000 };
+const pingedAt = 1000000;
+assert(ws.isClientStale({ lastPong: pingedAt }, pingedAt + 30000) === false, 'client that answered the last ping is not dropped at the next one');
+assert(ws.isClientStale({ lastPong: pingedAt }, pingedAt + 60000) === true, 'client that missed a ping is dropped');
+assert(ws.isClientStale({}, pingedAt) === false, 'new client with no pong yet is not dropped');
+
 // ── Driver instructions ───────────────────────────────────────────────────────
 
 ['enter', 'move-forward', 'move-back', 'stop'].forEach((instruction) => {

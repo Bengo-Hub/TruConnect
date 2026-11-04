@@ -178,12 +178,12 @@ setTimeout(() => {
   sm.cumulativeBaseOffset = 0;
   sm.lastScaleFrameAt = null;
   replay([frameHex('+00022001B')]);
-  assert(reading() === 0, `restart: held total reads 0 kg (got ${reading()})`);
-  assert(sm.scaleResyncRequired === true, 'restart: operator is asked to press Weighing again');
+  assert(reading() === 220, `restart with no axles captured: the real total is shown (got ${reading()})`);
+  assert(sm.scaleResyncRequired === false, 'restart with no axles captured: no notice');
+  capture();
   wait(1000);
   replay([frameHex('+00032001A')]);
-  assert(reading() === 100, `restart: next axle reads its own weight (got ${reading()})`);
-  assert(sm.scaleResyncRequired === false, 'restart: notice clears on the next new total');
+  assert(reading() === 100, `restart: next axle reads its own weight after a capture (got ${reading()})`);
 
   // Clear and a new axle during an outage, with the new total above the old base
   sm.reset();

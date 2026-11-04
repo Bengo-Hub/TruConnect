@@ -33,6 +33,34 @@ class SerialInput extends EventEmitter {
     this.lastDataTime = null;
     this.reconnectTimer = null;
     this.reconnectInterval = config.reconnectInterval || 5000;
+
+    // A port can stay open with nothing arriving, so "connected" alone says little.
+    // Only meant for devices that send unprompted (see InputManager).
+    this.silenceAfterMs = config.silenceAfterMs || 0;
+    this.silenceTimer = null;
+    this.isSilent = false;
+  }
+
+  /**
+   * Report when an open port stops receiving data, and when it recovers
+   */
+  checkSilence(now = Date.now()) {
+    if (!this.silenceAfterMs || !this.isConnected) return;
+    const lastHeard = this.lastDataTime ? this.lastDataTime.getTime() : this.openedAt;
+    if (!this.isSilent && lastHeard && now - lastHeard > this.silenceAfterMs) {
+      this.isSilent = true;
+      console.warn(`[SerialInput] ${this.config.port} is open but no data for ${Math.round((now - lastHeard) / 1000)}s`);
+      this.emit('silent');
+    }
+  }
+
+  noteDataReceived(data) {
+    this.lastDataTime = new Date();
+    if (this.isSilent) {
+      this.isSilent = false;
+      console.log(`[SerialInput] ${this.config.port} data resumed: ${data.toString('hex').slice(0, 48)}`);
+      this.emit('resumed');
+    }
   }
 
   /**
@@ -62,12 +90,16 @@ class SerialInput extends EventEmitter {
         this.serialPort.on('open', () => {
           console.log(`Serial port ${this.config.port} opened`);
           this.isConnected = true;
+          this.openedAt = Date.now();
+          if (this.silenceAfterMs && !this.silenceTimer) {
+            this.silenceTimer = setInterval(() => this.checkSilence(), 2000);
+          }
           this.emit('connected');
           resolve();
         });
 
         this.serialPort.on('data', (data) => {
-          this.lastDataTime = new Date();
+          this.noteDataReceived(data);
           this.emit('data', data);
         });
 
@@ -103,6 +135,10 @@ class SerialInput extends EventEmitter {
    */
   async stop() {
     this.clearReconnect();
+    if (this.silenceTimer) {
+      clearInterval(this.silenceTimer);
+      this.silenceTimer = null;
+    }
 
     return new Promise((resolve) => {
       if (this.serialPort && this.serialPort.isOpen) {
