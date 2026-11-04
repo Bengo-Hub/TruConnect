@@ -128,6 +128,7 @@ class StateManager {
     this.cumulativeBaseOffset = 0;       // Raw cumulative reading at last axle capture point
     this.lastScaleFrameAt = null;        // Time of the last frame from a held-total console
     this.scaleResyncRequired = false;    // Frames were interrupted and the total changed meanwhile
+    this.weighingPressesSinceCapture = 0; // Rises in a held total since the last axle capture
 
     // Mobile mode state
     this.mobileState = {
@@ -481,6 +482,7 @@ class StateManager {
     this.lastRawCumulativeWeight = heldTotal;
     this.cumulativeBaseOffset = heldTotal;
     this.scaleResyncRequired = false;
+    this.weighingPressesSinceCapture = 0;
 
     // Reset vehicle state
     this.currentPlate = null;
@@ -551,18 +553,36 @@ class StateManager {
     if (framesInterrupted && totalChanged) {
       this.cumulativeBaseOffset = total;
       this.scaleResyncRequired = total > 0;
+      this.weighingPressesSinceCapture = 0;
       console.warn(`[StateManager] Scale frames were interrupted and the total changed to ${total}kg - base reset, reading 0kg until the next Weighing press`);
       return;
     }
 
     if (totalChanged) {
       this.scaleResyncRequired = false;
+      // Each press raises the total, even when two axles weigh the same
+      this.weighingPressesSinceCapture = total > this.lastRawCumulativeWeight
+        ? this.weighingPressesSinceCapture + 1
+        : 0;
     }
 
     // A running total can only fall when the console was cleared, so nothing is left to subtract
     if (total < this.cumulativeBaseOffset) {
       this.cumulativeBaseOffset = 0;
     }
+  }
+
+  /**
+   * Message for the operator about a held-total console, or null when there is nothing to say
+   */
+  getScaleNotice() {
+    if (this.scaleResyncRequired) {
+      return 'The scale connection was interrupted and its total changed. Press Weighing on the console again for this axle.';
+    }
+    if (this.weighingPressesSinceCapture >= 2) {
+      return `Weighing was pressed ${this.weighingPressesSinceCapture} times since the last capture. Check the console's axle list before capturing, as this reading may include more than one axle.`;
+    }
+    return null;
   }
 
   /**
@@ -627,6 +647,8 @@ class StateManager {
     if (this.lastRawCumulativeWeight > 0) {
       this.cumulativeBaseOffset = this.lastRawCumulativeWeight;
       console.log(`[StateManager.addAxleWeight] Axle ${axleData.axleNumber}: ${weight}kg, cumulativeBase updated to ${this.cumulativeBaseOffset}kg`);
+
+      this.weighingPressesSinceCapture = 0;
 
       // Frames can be a second apart, so clear this axle now to stop it being captured twice
       if (this.holdsCumulativeTotal()) {
@@ -1139,6 +1161,14 @@ StateManager.getMobileWeightData = function() {
 
 StateManager.getMultideckWeightData = function() {
   return StateManager.getInstance().getMultideckWeightData();
+};
+
+StateManager.getCurrentPlate = function() {
+  return StateManager.getInstance().getCurrentPlate();
+};
+
+StateManager.setCurrentPlate = function(plate, vehicleType) {
+  return StateManager.getInstance().setCurrentPlate(plate, vehicleType);
 };
 
 StateManager.setPlate = function(plate, source) {

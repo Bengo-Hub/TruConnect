@@ -119,11 +119,10 @@ MCGS uses `useCumulativeWeight` without `holdsCumulativeTotal`, so its behaviour
 ### Known Limits
 
 - **Weighing pressed twice without a capture:** the next capture holds both axles as one weight. The
-  total changes once per press, even for two axles of equal weight, so this is detectable. TruConnect
-  does not act on it yet.
+  total rises once per press, even for two axles of equal weight, so TruConnect and TruLoad show a
+  warning. Capture stays allowed because the frames cannot show whether the presses were two axles or
+  one axle weighed twice.
 - **Weighing pressed before TruConnect starts:** that axle reads 0 until Weighing is pressed again.
-- **TruLoad web capture:** a rejected capture returns an error, but TruLoad's axle list is kept by the
-  frontend and is not rolled back by this response.
 - **Pad weights:** `scaleA` and `scaleB` are an even split of the axle weight, not the real pad values.
 - **XOR checksum:** two corrupted bytes with the same error cancel out and pass. For example, a frame
   corrupted to `+00099001B` would read as 990 kg.

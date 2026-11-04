@@ -535,7 +535,7 @@ function broadcastWeights(weights, error = null, weightData = null) {
         gvw: capturedGvw,  // Sum of captured axles only
         scaleInfo: StateManager.getMobileScaleInfo(),
         minCaptureWeight: StateManager.getMinCaptureWeight(),
-        scaleResyncRequired: sm.scaleResyncRequired,
+        scaleNotice: sm.getScaleNotice(),
         error: error,
         timestamp: new Date().toISOString()
       });
@@ -788,6 +788,48 @@ EventBus.on('client:registered', (data) => {
     mainWindow.webContents.send('pool:client-registered', data);
     sendPoolUpdate();
   }
+});
+
+// Setup values from TruLoad, shown in the Weighing Setup section
+EventBus.on('truload:setup', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('truload:setup-updated', data);
+  }
+});
+
+EventBus.on('driver:instruction', (data) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('truload:driver-instruction', data);
+  }
+});
+
+// The new station's id and config come from the cloud
+EventBus.on('tenant:station-changed', () => {
+  ConfigSyncService.runSync().catch((error) => {
+    console.warn('[TenantBinding] Config sync after station change failed:', error.message);
+  });
+});
+
+// A TruLoad client from another org is waiting; the operator decides whether to switch
+EventBus.on('tenant:mismatch', async ({ storedOrg, orgSlug, stationCode }) => {
+  const websocket = OutputManager.getInstance().outputs.websocket;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (websocket) websocket.resolveTenantMismatch(orgSlug, false);
+    return;
+  }
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: 'Different organization connecting',
+    message: `TruLoad for "${orgSlug}" is trying to connect`,
+    detail: `This TruConnect belongs to "${storedOrg}". Switching moves this device to "${orgSlug}"${stationCode ? ` at station ${stationCode}` : ''}, and new weighings go to that organization.`,
+    buttons: [`Keep "${storedOrg}"`, `Switch to "${orgSlug}"`],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  });
+  // Native dialogs can leave the page without keyboard focus on Windows
+  if (!mainWindow.isDestroyed()) mainWindow.webContents.focus();
+  if (websocket) websocket.resolveTenantMismatch(orgSlug, response === 1);
 });
 
 // When client requests weight (e.g. query-weight), trigger scale query; for MCGS this sends weigh command

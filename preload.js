@@ -82,6 +82,9 @@ const validReceiveChannels = [
   // Scale events
   'scale:status-changed',
   // Connection pool events
+  // TruLoad setup and driver instructions
+  'truload:setup-updated',
+  'truload:driver-instruction',
   'pool:client-joined',
   'pool:client-left',
   'pool:client-registered',

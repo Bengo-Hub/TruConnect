@@ -370,7 +370,7 @@ class CloudConnectionManager {
 
       case 'switch-bound':
         if (payload.bound) {
-          StateManager.setBound(payload.bound);
+          StateManager.getInstance().switchBound(payload.bound);
         }
         break;
 

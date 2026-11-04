@@ -1570,6 +1570,7 @@
             <span id="multideck-locked-text"></span>
             <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="multideck-change-vehicle-btn">Change Vehicle</button>
           </div>
+          <div class="capture-hint hidden" id="multideck-setup-notice" role="alert"></div>
           <button type="button" class="btn btn-primary" style="width:100%;" id="multideck-start-weighing-btn">
             <i class="fas fa-play"></i> Start Weighing
           </button>
@@ -1740,6 +1741,7 @@
             <span id="mobile-locked-text"></span>
             <button type="button" class="btn btn-secondary" style="margin-left:auto;padding:6px 12px;font-size:0.8rem;" id="mobile-change-vehicle-btn">Change Vehicle</button>
           </div>
+          <div class="capture-hint hidden" id="mobile-setup-notice" role="alert"></div>
           <button type="button" class="btn btn-primary" style="width:100%;" id="mobile-start-weighing-btn">
             <i class="fas fa-play"></i> Start Weighing
           </button>
@@ -1855,7 +1857,7 @@
     let axles = [];
     let currentWeight = 0;
     let minCaptureWeight = 50;
-    let scaleResyncRequired = false;
+    let scaleNotice = null;
     let captureBelowMinimum = false;
     let isStable = false;
     let currentDeckWeights = [0, 0, 0, 0];
@@ -2340,10 +2342,10 @@
         elements.currentAxleWeight.textContent = currentWeight.toLocaleString();
 
         minCaptureWeight = data.minCaptureWeight ?? minCaptureWeight;
-        const resyncRequired = data.scaleResyncRequired === true;
+        const latestNotice = data.scaleNotice ?? null;
         const stillBelowMinimum = captureBelowMinimum && currentWeight < minCaptureWeight;
-        if (resyncRequired !== scaleResyncRequired || stillBelowMinimum !== captureBelowMinimum) {
-          scaleResyncRequired = resyncRequired;
+        if (latestNotice !== scaleNotice || stillBelowMinimum !== captureBelowMinimum) {
+          scaleNotice = latestNotice;
           captureBelowMinimum = stillBelowMinimum;
           updateCaptureHint('mobile');
         }
@@ -2467,8 +2469,8 @@
       if (s.captureMode === 'commercial' && s.expectedAxles === 1 && s.selectedConfigAxleCount > 1) {
         text += ` This org has not enabled per-axle pre-compliance capture, so only a single net-weight reading is taken this visit regardless of the ${s.selectedConfigAxleCount}-axle configuration picked — enable a legal framework in Setup > Commercial Settings to capture per axle instead.`;
       }
-      if (prefix === 'mobile' && scaleResyncRequired) {
-        text += ' The scale connection was interrupted and its total changed. Press Weighing on the console again for this axle.';
+      if (prefix === 'mobile' && scaleNotice) {
+        text += ` ${scaleNotice}`;
       }
       if (prefix === 'mobile' && captureBelowMinimum) {
         text += ` This reading is below the ${minCaptureWeight} kg minimum capture weight. Press Weighing on the console after positioning the axle.`;
@@ -2649,12 +2651,77 @@
       }, 500);
     }
 
+    // Fill the Weighing Setup section from TruLoad. The fields stay editable, and a
+    // weighing already started on this screen is left alone.
+    const DRIVER_INSTRUCTION_LABELS = { enter: 'ENTER', 'move-forward': 'MOVE FORWARD', 'move-back': 'MOVE BACK', stop: 'STOP' };
+
+    function applyTruLoadSetup(data) {
+      if (!data) return;
+      if (data.stationCode && elements.stationCode) {
+        elements.stationCode.textContent = data.stationCode;
+      }
+
+      if (data.reset) {
+        ['mobile', 'multideck'].forEach((prefix) => {
+          const s = weighingSetup[prefix];
+          if (!s.truloadFilled || s.started) return;
+          s.truloadFilled = false;
+          resetWeighingSetup(prefix);
+          showSetupNotice(prefix, '');
+        });
+        return;
+      }
+
+      const prefix = data.mode === 'multideck' ? 'multideck' : 'mobile';
+      const s = weighingSetup[prefix];
+      const els = setupPrefixElements(prefix);
+      if (s.started) return;
+
+      if (data.workflow && data.workflow !== s.captureMode) {
+        setCaptureMode(prefix, data.workflow);
+      }
+      if (data.plateNumber) {
+        els.plateInput.value = String(data.plateNumber).toUpperCase();
+      }
+
+      let notice = data.notice || '';
+      if (data.axleConfigurationCode && els.axleConfigSelect) {
+        const option = [...els.axleConfigSelect.options].find((o) => o.dataset.code === data.axleConfigurationCode);
+        if (option) {
+          els.axleConfigSelect.value = option.value;
+        } else {
+          notice = `TruLoad selected axle configuration ${data.axleConfigurationCode}, which has not synced to this device yet. ${notice}`.trim();
+        }
+      }
+
+      if (data.plateNumber || data.axleConfigurationCode || data.workflow) {
+        s.truloadFilled = true;
+      }
+      showSetupNotice(prefix, notice);
+    }
+
+    function showDriverInstruction(data) {
+      const label = DRIVER_INSTRUCTION_LABELS[data && data.instruction];
+      if (label) showSetupNotice(currentMode === 'multideck' ? 'multideck' : 'mobile', `Driver instruction sent from TruLoad: ${label}`);
+    }
+
+    // Shown on the page instead of a native alert, which can leave Electron's inputs
+    // unable to take keyboard focus on Windows, which looks like a frozen field.
+    function showSetupNotice(prefix, message) {
+      const notice = document.getElementById(`${prefix}-setup-notice`);
+      if (!notice) return;
+      notice.textContent = message;
+      notice.className = message ? 'capture-hint' : 'capture-hint hidden';
+    }
+
     async function startWeighing(prefix) {
       const s = weighingSetup[prefix];
       const els = setupPrefixElements(prefix);
+      showSetupNotice(prefix, '');
       const plate = (els.plateInput.value || '').trim().toUpperCase();
       if (!plate) {
-        alert('Enter a vehicle registration number first.');
+        showSetupNotice(prefix, 'Enter a vehicle registration number first.');
+        els.plateInput.focus();
         return;
       }
 
@@ -2670,23 +2737,23 @@
       // same enforcement axle configs (per-axle tolerance/GVW references) for its own
       // provisional compliance check, so it is not exempt from either requirement.
       if (localAxleConfigs.length === 0) {
-        alert('No axle configurations have synced from the cloud yet. Connect to the network so TruConnect can sync station and axle-configuration data, then try again.');
+        showSetupNotice(prefix, 'No axle configurations have synced from the cloud yet. Connect to the network so TruConnect can sync station and axle-configuration data, then try again.');
         return;
       }
       if (!axleConfigurationId) {
-        alert('Select an axle configuration before starting the weighing.');
+        showSetupNotice(prefix, 'Select an axle configuration before starting the weighing.');
         return;
       }
       try {
         const syncStatusRes = await api.invoke('config-sync:get-status');
         const syncStatus = syncStatusRes && syncStatusRes.status;
         if (!syncStatus || !syncStatus.stationId) {
-          alert('This station has not been resolved against the cloud yet. Check the station code in Settings and run "Sync Now" once online before starting a weighing.');
+          showSetupNotice(prefix, 'This station has not been resolved against the cloud yet. Check the station code in Settings and run "Sync Now" once online before starting a weighing.');
           return;
         }
       } catch (error) {
         console.error('Error checking config sync status:', error);
-        alert('Could not verify station/config sync status - try again.');
+        showSetupNotice(prefix, 'Could not verify station/config sync status - try again.');
         return;
       }
 
@@ -2703,7 +2770,7 @@
             resumeLocalId
           });
           if (!result || !result.success) {
-            alert('Could not start the commercial weighing: ' + ((result && result.error) || 'unknown error'));
+            showSetupNotice(prefix, 'Could not start the commercial weighing: ' + ((result && result.error) || 'unknown error'));
             return;
           }
           // main.js resolves the REAL expected axle count server-side (single reading
@@ -2715,7 +2782,7 @@
           if (!api.setAxleConfig) return;
           const result = await api.setAxleConfig({ plateNumber: plate, axleConfigurationId, axleConfigurationCode, expectedAxles });
           if (!result || !result.success) {
-            alert('Could not start the weighing: ' + ((result && result.error) || 'unknown error'));
+            showSetupNotice(prefix, 'Could not start the weighing: ' + ((result && result.error) || 'unknown error'));
             return;
           }
           s.expectedAxles = expectedAxles;
@@ -2752,7 +2819,7 @@
         }
       } catch (error) {
         console.error('Error starting weighing:', error);
-        alert('Error starting weighing: ' + error.message);
+        showSetupNotice(prefix, 'Error starting weighing: ' + error.message);
       }
     }
 
@@ -3416,6 +3483,11 @@
         api.onClientLeft((data) => {
           console.log('Client left:', data);
         });
+      }
+
+      if (api.on) {
+        api.on('truload:setup-updated', applyTruLoadSetup);
+        api.on('truload:driver-instruction', showDriverInstruction);
       }
 
       if (api.onClientRegistered) {

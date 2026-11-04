@@ -1584,6 +1584,35 @@ Captured frames, the operator workflow and known limits are in [WD2-WEIGHT-STRIN
 
 ---
 
+## TruLoad Setup Sync
+
+TruLoad's weighing screens share their setup with TruConnect as the operator enters it. The Weighing Setup section fills from these values and stays editable, so TruConnect still works on its own. A weighing already started on the TruConnect screen is left unchanged.
+
+| Value | Sent when | Message |
+|-------|-----------|---------|
+| Org slug, station, mode (enforcement or commercial) | On connecting, and when any of them change | `register` |
+| Plate | As it is entered on the first step | `plate` |
+| Axle configuration | When selected, before a transaction exists | `update-config` |
+| Transaction, plate, axle configuration | Once the transaction exists | `transaction-sync` |
+| Clear the mirrored values | Session reset | `reset-session` |
+
+Commercial mobile weighing in TruLoad sets an axle count without picking a configuration, so the Axle Configuration field is not filled for that workflow.
+
+**Tenant and station binding**: the first TruLoad connection stores its org slug and station as `tenantBinding`. Each later connection is compared by org slug, ignoring case.
+
+| Connection | Result |
+|------------|--------|
+| Same org, same station | Confirmed |
+| Same org, different station | TruLoad's station is applied, with a notice in both apps, and config sync runs for the new station |
+| Different org | Refused while the TruConnect operator chooses to keep the current org or switch to the new one |
+| No org slug | Allowed without a check, for older clients and other tools |
+
+API polling has no registration step, so `POST /transaction-sync` carries the org slug and returns `409` with code `ORG_MISMATCH` for a different org. `GET /weights` is not checked.
+
+**Driver instructions**: `enter`, `move-forward`, `move-back` and `stop` are acknowledged with `driver-instruction-ack`, logged, and shown on the TruConnect screen. Text for the RDUs is held in `rdu.driverInstructions` and is not sent, because the configured KELI panels are numeric.
+
+---
+
 ## WebSocket Best Practices
 
 Based on current industry best practices for real-time weight streaming:

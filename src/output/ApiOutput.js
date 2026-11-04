@@ -16,6 +16,7 @@ const express = require('express');
 const cors = require('cors');
 const { EventEmitter } = require('events');
 const StateManager = require('../core/StateManager');
+const TenantBinding = require('../core/TenantBinding');
 const EventBus = require('../core/EventBus');
 const ConfigManager = require('../config/ConfigManager');
 const BackendClient = require('../backend/BackendClient');
@@ -157,6 +158,8 @@ class ApiOutput extends EventEmitter {
           websocketUrl: `ws://localhost:${wsPort}`,
           data: {
             currentWeight: currentWeight,  // Live scale reading (total axle weight)
+            minCaptureWeight: StateManager.getMinCaptureWeight(),
+            scaleNotice: StateManager.getInstance().getScaleNotice(),
             // Individual scale weights (for scale test and diagnostics)
             // PAW: derived from combined weight (total/2)
             // Haenni: may be provided separately
@@ -392,6 +395,8 @@ class ApiOutput extends EventEmitter {
       StateManager.setCurrentPlate(plateNumber, vehicleType);
 
       // Emit event
+      EventBus.emit('truload:setup', { plateNumber });
+
       EventBus.emit('plate:received', {
         stationCode,
         bound,
@@ -442,6 +447,16 @@ class ApiOutput extends EventEmitter {
           timestamp: new Date().toISOString()
         });
       }
+      // API polling has no registration step, so the tenant check happens here
+      const binding = TenantBinding.check({ orgSlug: data.orgSlug, stationCode: data.stationCode, stationName: data.stationName });
+      if (binding.status === 'org-mismatch') {
+        return res.status(409).json({
+          success: false,
+          code: 'ORG_MISMATCH',
+          error: binding.message,
+          timestamp: new Date().toISOString()
+        });
+      }
       try {
         StateManager.setTransactionSync(data);
         BackendClient.syncFromTransaction(data);
@@ -453,10 +468,17 @@ class ApiOutput extends EventEmitter {
         if (data.totalAxles) {
           StateManager.setAxleConfiguration({
             expectedAxles: data.totalAxles,
+            axleConfigurationId: data.axleConfigurationId,
             axleConfigurationCode: data.axleConfigCode,
             plateNumber: data.vehicleRegNumber
           });
         }
+        EventBus.emit('truload:setup', {
+          mode: data.weighingMode,
+          plateNumber: data.vehicleRegNumber,
+          axleConfigurationCode: data.axleConfigCode,
+          totalAxles: data.totalAxles
+        });
         EventBus.emit('transaction:synced', { ...data, source: 'api' });
         res.json({
           success: true,
@@ -590,6 +612,7 @@ class ApiOutput extends EventEmitter {
     router.post('/reset-session', (req, res) => {
       try {
         EventBus.emit('session:reset', { source: 'api' });
+        EventBus.emit('truload:setup', { reset: true });
         StateManager.setPlate(null, null);
         StateManager.clearTransactionSync();
         BackendClient.resetSession();
@@ -626,11 +649,26 @@ class ApiOutput extends EventEmitter {
       });
     });
 
+    // Driver instruction from TruLoad's capture screen (mirrors the WebSocket events)
+    router.post('/driver-instruction', (req, res) => {
+      const { instruction } = req.body || {};
+      if (!['enter', 'move-forward', 'move-back', 'stop'].includes(instruction)) {
+        return res.status(400).json({
+          success: false,
+          error: 'instruction must be enter, move-forward, move-back or stop',
+          timestamp: new Date().toISOString()
+        });
+      }
+      EventBus.emit('driver:instruction', { instruction, source: 'api' });
+      res.json({ success: true, data: { instruction }, timestamp: new Date().toISOString() });
+    });
+
     // Update axle configuration (mirrors WebSocket update-config)
     router.post('/update-config', (req, res) => {
       try {
         const { totalAxles, axleConfigurationCode } = req.body;
         const sm = StateManager.getInstance();
+        EventBus.emit('truload:setup', { totalAxles, axleConfigurationCode });
         if (totalAxles != null) {
           sm.axleConfig = {
             ...sm.axleConfig,

@@ -38,6 +38,7 @@ const StateManager = require('../core/StateManager');
 const BackendClient = require('../backend/BackendClient');
 const ConfigManager = require('../config/ConfigManager');
 const SimulationEngine = require('../simulation/SimulationEngine');
+const TenantBinding = require('../core/TenantBinding');
 
 class WebSocketOutput extends EventEmitter {
   constructor(config = {}) {
@@ -288,6 +289,13 @@ class WebSocketOutput extends EventEmitter {
           this.handleWeightsCaptured(clientId, data);
           break;
 
+        case 'enter':
+        case 'move-forward':
+        case 'move-back':
+        case 'stop':
+          this.handleDriverInstruction(clientId, event);
+          break;
+
         default:
           console.warn(`Unknown event from ${clientId}: ${event}`);
       }
@@ -308,6 +316,12 @@ class WebSocketOutput extends EventEmitter {
   handleRegister(clientId, data) {
     const client = this.clients.get(clientId);
     if (!client) return;
+
+    const binding = TenantBinding.check(data);
+    if (binding.status === 'org-mismatch') {
+      this.holdForTenantDecision(clientId, data, binding);
+      return;
+    }
 
     client.stationCode = data.stationCode;
     client.bound = data.bound || 'A';
@@ -350,8 +364,16 @@ class WebSocketOutput extends EventEmitter {
     const captureMode = ConfigManager.get('app.captureMode', 'mobile');
 
     // Acknowledge registration with full station info
+    EventBus.emit('truload:setup', {
+      mode: data.mode || 'mobile',
+      workflow: data.workflow,
+      stationCode: binding.status === 'unverified' ? undefined : ConfigManager.get('station.code'),
+      notice: binding.message
+    });
+
     this.sendToClient(clientId, 'register-ack', {
       success: true,
+      binding,
       message: `Registration successful! Welcome to ${stationConfig.name || 'TruConnect Station'}.`,
       client: {
         clientId,
@@ -433,11 +455,82 @@ class WebSocketOutput extends EventEmitter {
       vehicleType: data.vehicleType
     });
 
+    EventBus.emit('truload:setup', { mode: client.mode, plateNumber: data.plateNumber });
+
     // Acknowledge
     this.sendToClient(clientId, 'plate-ack', {
       success: true,
       plateNumber: data.plateNumber
     });
+  }
+
+  /**
+   * Refuse a client from another org until the operator decides on the TruConnect screen
+   */
+  holdForTenantDecision(clientId, data, binding) {
+    const client = this.clients.get(clientId);
+    client.pendingRegistration = data;
+    this.sendToClient(clientId, 'register-ack', {
+      success: false,
+      code: 'ORG_MISMATCH',
+      message: binding.message,
+      binding
+    });
+
+    const orgKey = String(data.orgSlug).toLowerCase();
+    this.tenantDecisionsOpen = this.tenantDecisionsOpen || new Set();
+    if (this.tenantDecisionsOpen.has(orgKey)) return;
+    this.tenantDecisionsOpen.add(orgKey);
+    EventBus.emit('tenant:mismatch', {
+      storedOrg: binding.storedOrg,
+      orgSlug: data.orgSlug,
+      stationCode: data.stationCode,
+      stationName: data.stationName
+    });
+  }
+
+  /**
+   * Apply the operator's answer to clients waiting on an org mismatch
+   */
+  resolveTenantMismatch(orgSlug, accepted) {
+    const orgKey = String(orgSlug).toLowerCase();
+    if (this.tenantDecisionsOpen) this.tenantDecisionsOpen.delete(orgKey);
+
+    const waiting = [...this.clients.entries()]
+      .filter(([, client]) => String(client.pendingRegistration?.orgSlug || '').toLowerCase() === orgKey);
+
+    if (accepted && waiting.length > 0) {
+      const { orgSlug: newOrg, stationCode, stationName } = waiting[0][1].pendingRegistration;
+      TenantBinding.bind(newOrg, stationCode, stationName);
+    }
+
+    for (const [clientId, client] of waiting) {
+      const data = client.pendingRegistration;
+      delete client.pendingRegistration;
+      if (accepted) {
+        this.handleRegister(clientId, data);
+      } else {
+        this.sendToClient(clientId, 'error', {
+          code: 'ORG_MISMATCH',
+          message: `The TruConnect operator kept this device on its current organization, so "${orgSlug}" was not connected.`
+        });
+      }
+    }
+  }
+
+  /**
+   * Handle a driver instruction from TruLoad's capture screen
+   */
+  handleDriverInstruction(clientId, instruction) {
+    const client = this.clients.get(clientId);
+    if (!client || !client.registered) {
+      this.sendToClient(clientId, 'error', { message: 'Not registered' });
+      return;
+    }
+
+    console.log(`Driver instruction from ${client.stationCode}: ${instruction}`);
+    EventBus.emit('driver:instruction', { instruction, stationCode: client.stationCode, source: 'websocket' });
+    this.sendToClient(clientId, 'driver-instruction-ack', { success: true, instruction });
   }
 
   /**
@@ -550,10 +643,18 @@ class WebSocketOutput extends EventEmitter {
     if (data.totalAxles) {
       StateManager.setAxleConfiguration({
         expectedAxles: data.totalAxles,
+        axleConfigurationId: data.axleConfigurationId,
         axleConfigurationCode: data.axleConfigCode,
         plateNumber: data.vehicleRegNumber
       });
     }
+
+    EventBus.emit('truload:setup', {
+      mode: data.weighingMode,
+      plateNumber: data.vehicleRegNumber,
+      axleConfigurationCode: data.axleConfigCode,
+      totalAxles: data.totalAxles
+    });
 
     // Emit event for other components
     EventBus.emit('transaction:synced', {
@@ -774,6 +875,8 @@ class WebSocketOutput extends EventEmitter {
       BackendClient.resetSession();
     }
 
+    EventBus.emit('truload:setup', { reset: true });
+
     this.sendToClient(clientId, 'session-reset-ack', { success: true });
   }
 
@@ -796,6 +899,8 @@ class WebSocketOutput extends EventEmitter {
         axleConfigurationCode: axleConfigurationCode || sm.axleConfig.axleConfigurationCode,
       };
     }
+
+    EventBus.emit('truload:setup', { mode: client.mode, totalAxles, axleConfigurationCode });
 
     this.sendToClient(clientId, 'update-config-ack', {
       success: true,
@@ -1060,6 +1165,8 @@ class WebSocketOutput extends EventEmitter {
         // Current scale reading (total axle weight)
         weight: currentWeight,
         currentWeight: currentWeight,  // Alias for API compatibility
+        minCaptureWeight: StateManager.getMinCaptureWeight(),
+        scaleNotice: StateManager.getInstance().getScaleNotice(),
         // Individual scale weights (for scale test and diagnostics)
         // PAW: derived from combined weight (total/2)
         // Haenni: may be provided separately

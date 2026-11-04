@@ -88,7 +88,24 @@ module.exports = {
       { deckIndex: 2, usrPort: 22, baudRate: 1200 },  // deck3 → RDU3
       { deckIndex: 3, usrPort: 23, baudRate: 1200 },  // deck4 → RDU4
       { deckIndex: 4, usrPort: 24, baudRate: 1200 }   // GVW   → RDU5
-    ]
+    ],
+    // Text for TruLoad's driver buttons. Not sent yet: KELI panels are numeric, so this
+    // stays off until an RDU model that can display these messages is confirmed.
+    driverInstructions: {
+      enabled: false,
+      messages: {
+        enter: 'ENTER',
+        'move-forward': 'MOVE FORWARD',
+        'move-back': 'MOVE BACK',
+        stop: 'STOP'
+      }
+    }
+  },
+
+  // Tenant and station this device belongs to, set by the first TruLoad connection
+  tenantBinding: {
+    orgSlug: null,
+    stationCode: null
   },
 
   // Input configuration
