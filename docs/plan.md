@@ -513,3 +513,6 @@ When API polling is enabled in TruLoad, the middleware must also enable its API 
 | Sprint 06 | Authentication & UI Refinement | 3-4 days |
 | Sprint 07 | Production Optimization & Packaging | 2-3 days |
 | Sprint 08 | Two-Way Communication & Station Config | 3-4 days |
+| Sprint 09 | RDU Configuration Revamp & UI Enhancements | 2-3 days |
+| Sprint 10 | TruLoad Frontend Integration | 2-3 days |
+| Sprint 11 | 255-D WD2 Scale and TruLoad Sync | 1 day |
