@@ -1591,10 +1591,10 @@ TruLoad's weighing screens share their setup with TruConnect as the operator ent
 | Value | Sent when | Message |
 |-------|-----------|---------|
 | Org slug, station, mode (enforcement or commercial) | On connecting, and when any of them change | `register` |
-| Plate | As it is entered on the first step | `plate` |
-| Axle configuration | When selected, before a transaction exists | `update-config` |
-| Transaction, plate, axle configuration | Once the transaction exists | `transaction-sync` |
-| Tare or gross (commercial) | When the first weight is captured | `update-config` |
+| Plate | When Next is pressed on the first step, not while it is being typed | `plate` |
+| Axle configuration | When selected on the second step | `transaction-sync` |
+| Transaction, plate, axle configuration | When Next is pressed on the first step | `transaction-sync` |
+| Tare or gross (commercial) | When each weight is captured | `update-config` |
 | Driver, transporter, cargo, origin, destination | When selected on step 2. Shown read-only and not stored, as TruLoad's backend owns them | `vehicle-details` |
 | Clear the mirrored values | Session reset | `reset-session` |
 

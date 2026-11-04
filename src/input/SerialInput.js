@@ -67,6 +67,8 @@ class SerialInput extends EventEmitter {
     console.log(`[SerialInput] Reopening ${this.config.port} to recover the data`);
     try {
       await this.stop();
+      // Windows needs a moment to release a Bluetooth port, or opening it fails with error 1168
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       await this.start();
     } catch (error) {
       console.error(`[SerialInput] Reopen failed: ${error.message}`);
