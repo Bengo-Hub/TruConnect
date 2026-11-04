@@ -979,6 +979,7 @@
                   <option value="haenni">Haenni WL - Portable Scale (API)</option>
                   <option value="mcgs">MCGS - Mobile Scale (Serial)</option>
                   <option value="giropes">Giropes GI620 T8 - Mobile Scale (Serial)</option>
+                  <option value="wd2">Portable Axle Scale 255-D WD2 (Bluetooth Serial)</option>
                 </optgroup>
                 <optgroup label="Multideck Indicators (Platform)">
                   <option value="indicator_zm">ZM Protocol (Avery Weigh-Tronix, Ohaus)</option>
@@ -1132,6 +1133,30 @@
                 <select id="giropes-baud" class="form-control">
                   <option value="9600" selected>9600</option>
                   <option value="19200">19200</option>
+                  <option value="38400">38400</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- WD2 Configuration -->
+          <div class="form-section" id="wd2-config" style="display: none;">
+            <h3 class="form-section-title"><i class="fas fa-weight-hanging"></i> Portable Axle Scale 255-D WD2 (Bluetooth Serial)</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+              Set the console to continuous automatic output with Yaohua Protocol 1. Press Weighing on the console
+              for each axle before capturing it here, and press Clear on the console between vehicles. Use the
+              outgoing COM port of the paired Serial Adaptor.
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="wd2-port">COM Port</label>
+                <input type="text" id="wd2-port" class="form-control" placeholder="COM5" value="COM5">
+              </div>
+              <div class="form-group">
+                <label for="wd2-baud">Baud Rate</label>
+                <select id="wd2-baud" class="form-control">
+                  <option value="9600">9600</option>
+                  <option value="19200" selected>19200</option>
                   <option value="38400">38400</option>
                 </select>
               </div>
@@ -1396,6 +1421,14 @@
                   <small>Weights above this trigger alert</small>
                 </label>
                 <input type="number" id="max-weight" class="form-control" value="100000">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="min-capture-weight">Minimum Axle Capture Weight (kg)
+                  <small>Mobile scale readings below this cannot be captured</small>
+                </label>
+                <input type="number" id="min-capture-weight" class="form-control" min="1" value="50">
               </div>
             </div>
             <div class="form-row">
@@ -1848,6 +1881,7 @@
     const haenniConfig = document.getElementById('haenni-config');
     const mcgsConfig = document.getElementById('mcgs-config');
     const giropeConfig = document.getElementById('giropes-config');
+    const wd2Config = document.getElementById('wd2-config');
     const indicatorConfig = document.getElementById('indicator-config');
     const customConfig = document.getElementById('custom-config');
     const indicatorConnection = document.getElementById('indicator-connection');
@@ -1859,6 +1893,7 @@
       haenniConfig.style.display    = 'none';
       mcgsConfig.style.display      = 'none';
       giropeConfig.style.display    = 'none';
+      wd2Config.style.display       = 'none';
       indicatorConfig.style.display = 'none';
       customConfig.style.display    = 'none';
 
@@ -1870,6 +1905,8 @@
         mcgsConfig.style.display = 'block';
       } else if (source === 'giropes') {
         giropeConfig.style.display = 'block';
+      } else if (source === 'wd2') {
+        wd2Config.style.display = 'block';
       } else if (source.startsWith('indicator_')) {
         indicatorConfig.style.display = 'block';
 
@@ -2555,6 +2592,23 @@
           },
           useCumulativeWeight: false
         };
+      } else if (source === 'wd2') {
+        config.wd2 = {
+          enabled: true,
+          type: 'serial',
+          protocol: 'WD2',
+          serial: {
+            port: document.getElementById('wd2-port').value || 'COM5',
+            baudRate: parseInt(document.getElementById('wd2-baud').value) || 19200,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            queryCommand: ''
+          },
+          useCumulativeWeight: true,
+          holdsCumulativeTotal: true,
+          heldTotalGapMs: 5000
+        };
       } else if (source.startsWith('indicator_') || source === 'custom') {
         const connectionType = document.getElementById('indicator-connection').value;
         const sourceKey = source === 'custom' ? 'custom' : source;
@@ -2632,6 +2686,7 @@
           },
           mobile: {
             minAxleWeight: parseInt(document.getElementById('min-weight').value) || 200,
+            minCaptureWeight: parseInt(document.getElementById('min-capture-weight').value) || 50,
             maxAxleWeight: 20000,
             maxGvw: parseInt(document.getElementById('max-weight').value) || 100000,
             stableTolerance: stableTolerance,
@@ -2752,6 +2807,13 @@
           document.getElementById('giropes-baud').value = giropes.serial?.baudRate || 9600;
         }
 
+        // Populate WD2 config
+        if (settings.input.wd2) {
+          const wd2 = settings.input.wd2;
+          document.getElementById('wd2-port').value = wd2.serial?.port || 'COM5';
+          document.getElementById('wd2-baud').value = wd2.serial?.baudRate || 19200;
+        }
+
         // Populate indicator config (for any indicator_* source)
         const indicatorSources = ['indicator_zm', 'indicator_cardinal', 'indicator_cardinal2', 'indicator_1310', 'custom'];
         for (const src of indicatorSources) {
@@ -2792,6 +2854,7 @@
         document.getElementById('max-weight').value = thresholds.maxWeight || 100000;
         document.getElementById('vehicle-detection').value = thresholds.vehicleDetection || 500;
         document.getElementById('stable-tolerance').value = thresholds.stableTolerance || 50;
+        document.getElementById('min-capture-weight').value = settings.thresholds.mobile?.minCaptureWeight || 50;
       }
 
       // Mobile mode

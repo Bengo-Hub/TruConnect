@@ -133,7 +133,7 @@ TruConnect/
 │   │   ├── CardinalParser.js       # Cardinal indicator protocol
 │   │   ├── Cardinal2Parser.js      # Cardinal2 indicator protocol
 │   │   ├── I1310Parser.js          # 1310 indicator protocol
-│   │   ├── MobileScaleParser.js    # Mobile scales (PAW, Haenni, MCGS)
+│   │   ├── MobileScaleParser.js    # Mobile scales (PAW, Haenni, MCGS, Giropes, WD2)
 │   │   └── CustomParser.js         # User-defined parsing
 │   │
 │   ├── output/
@@ -242,6 +242,8 @@ type InputSource =
   | 'paw'               // PAW Portable Axle Weigher (Serial)
   | 'haenni'            // Haenni WL Portable (API)
   | 'mcgs'              // MCGS Mobile Scale (Serial)
+  | 'giropes'           // Giropes GI620 T8 (Serial)
+  | 'wd2'               // Portable Axle Scale 255-D WD2 (Bluetooth Serial)
   | 'indicator_zm'      // ZM Protocol Indicator
   | 'indicator_cardinal'     // Cardinal Scale
   | 'indicator_cardinal2'    // Cardinal Model 225/738

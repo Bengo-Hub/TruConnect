@@ -483,7 +483,16 @@ class ApiOutput extends EventEmitter {
         // Use currentMobileWeight (already cumulative-adjusted) for MCGS and similar
         // This prevents double-application of cumulative logic
         const weight = StateManager.getCurrentMobileWeight();
-        
+
+        const minCaptureWeight = StateManager.getMinCaptureWeight();
+        if (weight < minCaptureWeight) {
+          return res.status(400).json({
+            success: false,
+            error: `Axle ${axleNumber} not captured: ${weight}kg is below the ${minCaptureWeight}kg minimum`,
+            timestamp: new Date().toISOString()
+          });
+        }
+
         StateManager.addAxleWeight(weight);
         EventBus.emit('axle:captured', { axleNumber, weight, source: 'api' });
         const isComplete = StateManager.isWeighingComplete();

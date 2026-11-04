@@ -76,6 +76,7 @@ Mobile weighing uses portable axle weighers that consist of two wheel pads (Scal
 | **PAW** | Combined (A+B) | Derived: total ÷ 2 | Returns total axle weight |
 | **Haenni** | May be separate | Direct from API | May return scaleA/scaleB separately |
 | **MCGS** | Combined (A+B) | Derived: total ÷ 2 | Serial frames `=SG+0000123kR`, one frame = one axle |
+| **WD2 (255-D)** | Running vehicle total | Derived: axle ÷ 2 | Yaohua frames over Bluetooth, updated by the console's Weighing button. See [WD2-WEIGHT-STRING.md](WD2-WEIGHT-STRING.md) |
 
 ### Weight Data Structure
 

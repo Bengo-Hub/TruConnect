@@ -96,7 +96,7 @@ module.exports = {
   // Activating a new source automatically deactivates the current one
   input: {
     // Currently active input source
-    // Values: 'none' | 'paw' | 'haenni' | 'mcgs' | 'giropes' | 'indicator_zm' | 'indicator_cardinal' |
+    // Values: 'none' | 'paw' | 'haenni' | 'mcgs' | 'giropes' | 'wd2' | 'indicator_zm' | 'indicator_cardinal' |
     //         'indicator_cardinal2' | 'indicator_1310' | 'custom' | 'udp_legacy'
     activeSource: 'none',
 
@@ -198,6 +198,31 @@ module.exports = {
         parity: 'none',
         stopBits: 1,
         queryCommand: ''              // Continuous streaming — no query needed
+      }
+    },
+
+    // Portable axle scale 255-D WD2 console (Bluetooth serial, Yaohua Protocol 1)
+    // Console settings: continuous automatic output, Yaohua Protocol 1, 19200 baud
+    // Frame format: STX "+00010001A" ETX — running vehicle total, updated by the console's Weighing button
+    wd2: {
+      enabled: false,
+      type: 'serial',
+      protocol: 'WD2',
+      useCumulativeWeight: true,      // Console sends the running total, so we subtract previous axles
+      holdsCumulativeTotal: true,     // Console repeats that total until Clear is pressed on it
+      heldTotalGapMs: 5000,           // Frames arrive every second; a longer gap counts as an interruption
+      metadata: {
+        make: 'Portable axle scale',
+        model: '255-D WD2',
+        capacity: 30000
+      },
+      serial: {
+        port: 'COM5',                 // Outgoing Bluetooth port of the paired Serial Adaptor
+        baudRate: 19200,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
+        queryCommand: ''              // Console sends frames unprompted — no query needed
       }
     },
 
@@ -403,6 +428,7 @@ module.exports = {
     // Mobile mode thresholds (axle-by-axle)
     mobile: {
       minAxleWeight: 200,             // Minimum valid axle weight (kg)
+      minCaptureWeight: 50,           // Readings below this cannot be captured as an axle (kg)
       maxAxleWeight: 20000,           // Maximum single axle weight (kg)
       maxGvw: 100000,                 // Maximum total GVW (kg)
       stableTolerance: 20,            // Stability tolerance for axle capture (kg)

@@ -7,7 +7,7 @@ TruConnect is a modern, feature-rich Electron application serving as weighbridge
 ## 🌟 Features
 
 ### Core Capabilities (100% Implemented)
-- **8 Weight Indicator Protocol Parsers** - ZM (Avery), Cardinal, Cardinal2, 1310, PAW, Haenni, UDP Binary, Custom
+- **11 Weight Indicator Protocol Parsers** - ZM (Avery), Cardinal, Cardinal2, 1310, PAW, Haenni, MCGS, Giropes, WD2, UDP Binary, Custom
 - **Multiple Input Sources** - Serial (RS-232/USB), TCP, UDP, HTTP API
 - **Multiple Output Channels** - WebSocket (port 3030), Serial RDU, Network RDU, REST API
 - **Mobile & Multideck Modes** - Sequential axle capture and simultaneous 4-deck weighing
@@ -261,8 +261,8 @@ For technical support or inquiries, please contact:
 
 ### v2.0.0 (February 2026) - Current
 - **Modular Architecture** - Clean input/parser/output/core separation (~10,500 lines)
-- **8 Protocol Parsers** - ZM, Cardinal, Cardinal2, 1310, PAW, Haenni, UDP Binary, Custom
-- **Mobile Weighing Mode** - PAW & Haenni scale support with axle-by-axle capture
+- **11 Protocol Parsers** - ZM, Cardinal, Cardinal2, 1310, PAW, Haenni, MCGS, Giropes, WD2, UDP Binary, Custom
+- **Mobile Weighing Mode** - PAW, Haenni, MCGS, Giropes & WD2 scale support with axle-by-axle capture
 - **Multideck Mode** - Simultaneous 4-deck weight capture with GVW
 - **Cloud Relay** - CloudConnectionManager for LOCAL/LIVE modes
 - **Backend Integration** - BackendClient with autoweigh submissions

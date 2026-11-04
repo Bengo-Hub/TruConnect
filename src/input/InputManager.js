@@ -20,6 +20,7 @@ const INPUT_SOURCES = [
   'haenni',
   'mcgs',
   'giropes',
+  'wd2',
   'indicator_zm',
   'indicator_cardinal',
   'indicator_cardinal2',
@@ -497,6 +498,18 @@ class InputManager {
       }
     }
 
+    // WD2: frames are STX...ETX with no line terminator and often split across chunks
+    if (this.activeSource === 'wd2' && this.buffer.length > 0) {
+      const wd2FramePattern = /\x02[+-]\d{7}[0-9A-F]{2}\x03/g;
+      let match;
+      let lastEnd = 0;
+      while ((match = wd2FramePattern.exec(this.buffer)) !== null) {
+        lastEnd = match.index + match[0].length;
+        this._parseAndEmit(match[0]);
+      }
+      this.buffer = this.buffer.substring(lastEnd);
+    }
+
     // Prevent buffer overflow
     if (this.buffer.length > 10000) {
       console.warn('Input buffer overflow, clearing');
@@ -521,7 +534,7 @@ class InputManager {
         const results = Array.isArray(result) ? result : [result];
 
         // Determine mode from active source - mobile sources (PAW, Haenni, MCGS) don't use deck weights
-        const isMobileSource = ['paw', 'haenni', 'mcgs', 'giropes'].includes(this.activeSource);
+        const isMobileSource = ['paw', 'haenni', 'mcgs', 'giropes', 'wd2'].includes(this.activeSource);
         const captureMode = StateManager.getMode();
 
         if (isMobileSource || captureMode === 'mobile') {

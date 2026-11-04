@@ -591,6 +591,15 @@ class WebSocketOutput extends EventEmitter {
     // This prevents double-application of cumulative logic
     const weight = StateManager.getCurrentMobileWeight();
 
+    const minCaptureWeight = StateManager.getMinCaptureWeight();
+    if (weight < minCaptureWeight) {
+      const message = `Axle ${axleNumber} not captured: ${weight}kg is below the ${minCaptureWeight}kg minimum`;
+      console.warn(message);
+      this.sendToClient(clientId, 'axle-captured-ack', { success: false, axleNumber, weight, error: message });
+      this.sendToClient(clientId, 'error', { message });
+      return;
+    }
+
     console.log(`Axle ${axleNumber} captured: ${weight}kg from ${client.stationCode}`);
 
     // Add axle weight to StateManager (tracks captured axles)

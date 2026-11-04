@@ -1854,6 +1854,9 @@
     let isAuthenticated = false;
     let axles = [];
     let currentWeight = 0;
+    let minCaptureWeight = 50;
+    let scaleResyncRequired = false;
+    let captureBelowMinimum = false;
     let isStable = false;
     let currentDeckWeights = [0, 0, 0, 0];
 
@@ -2336,6 +2339,15 @@
         currentWeight = data.currentWeight ?? 0;
         elements.currentAxleWeight.textContent = currentWeight.toLocaleString();
 
+        minCaptureWeight = data.minCaptureWeight ?? minCaptureWeight;
+        const resyncRequired = data.scaleResyncRequired === true;
+        const stillBelowMinimum = captureBelowMinimum && currentWeight < minCaptureWeight;
+        if (resyncRequired !== scaleResyncRequired || stillBelowMinimum !== captureBelowMinimum) {
+          scaleResyncRequired = resyncRequired;
+          captureBelowMinimum = stillBelowMinimum;
+          updateCaptureHint('mobile');
+        }
+
         // Update session data if available
         if (data.session) {
           // Normalize axle data to use consistent property names
@@ -2454,6 +2466,12 @@
         : '';
       if (s.captureMode === 'commercial' && s.expectedAxles === 1 && s.selectedConfigAxleCount > 1) {
         text += ` This org has not enabled per-axle pre-compliance capture, so only a single net-weight reading is taken this visit regardless of the ${s.selectedConfigAxleCount}-axle configuration picked — enable a legal framework in Setup > Commercial Settings to capture per axle instead.`;
+      }
+      if (prefix === 'mobile' && scaleResyncRequired) {
+        text += ' The scale connection was interrupted and its total changed. Press Weighing on the console again for this axle.';
+      }
+      if (prefix === 'mobile' && captureBelowMinimum) {
+        text += ` This reading is below the ${minCaptureWeight} kg minimum capture weight. Press Weighing on the console after positioning the axle.`;
       }
       els.captureHint.className = text ? 'capture-hint' : 'capture-hint hidden';
       els.captureHint.textContent = text;
@@ -3070,8 +3088,10 @@
         return;
       }
 
-      if (currentWeight < 50) {
-        console.warn('Cannot capture: weight too low (< 50kg)');
+      if (currentWeight < minCaptureWeight) {
+        console.warn(`Cannot capture: weight too low (< ${minCaptureWeight}kg)`);
+        captureBelowMinimum = true;
+        updateCaptureHint('mobile');
         return;
       }
 
@@ -3090,6 +3110,9 @@
         try {
           const result = await api.sendAxleCaptured({ axleNumber, weight: weightToCapture });
           console.log(`Axle ${axleNumber} captured: ${weightToCapture}kg, Response:`, result);
+          if (result && result.success === false) {
+            throw new Error(result.error || 'Capture rejected');
+          }
 
           // Offline-weighing redesign (2026-09): show the local provisional result as
           // soon as it exists, and unlock "Complete Weighing" once all axles are in.

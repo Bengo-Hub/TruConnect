@@ -126,6 +126,8 @@ class StateManager {
     // This provides a robust baseline for subtraction regardless of missed WS notifications.
     this.lastRawCumulativeWeight = 0;    // Latest raw reading from MCGS (updated every frame)
     this.cumulativeBaseOffset = 0;       // Raw cumulative reading at last axle capture point
+    this.lastScaleFrameAt = null;        // Time of the last frame from a held-total console
+    this.scaleResyncRequired = false;    // Frames were interrupted and the total changed meanwhile
 
     // Mobile mode state
     this.mobileState = {
@@ -473,8 +475,12 @@ class StateManager {
     this.mobileWeightStable = true;
 
     // Reset cumulative weight tracking
-    this.lastRawCumulativeWeight = 0;
-    this.cumulativeBaseOffset = 0;
+    // A console that holds its total keeps sending it after this reset, so that total
+    // stays as the base. Otherwise it would read as the next vehicle's first axle.
+    const heldTotal = this.holdsCumulativeTotal() ? this.lastRawCumulativeWeight : 0;
+    this.lastRawCumulativeWeight = heldTotal;
+    this.cumulativeBaseOffset = heldTotal;
+    this.scaleResyncRequired = false;
 
     // Reset vehicle state
     this.currentPlate = null;
@@ -511,6 +517,65 @@ class StateManager {
    */
   resetMobileSession() {
     this.reset();
+  }
+
+  /**
+   * Whether the active source repeats its running total until cleared on the console (WD2)
+   */
+  holdsCumulativeTotal() {
+    try {
+      const ConfigManager = require('../config/ConfigManager');
+      const activeSource = ConfigManager.get('input.activeSource');
+      return !this.simulation && ConfigManager.get(`input.${activeSource}.holdsCumulativeTotal`, false) === true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * Keep the subtraction base in step with a console that holds its total.
+   *
+   * After a restart or outage a changed total could mean a Weighing press, a Clear, or
+   * both, and the frames cannot say which. The new total becomes the base so the reading
+   * is 0 rather than a guess, and the operator presses Weighing again for that axle.
+   */
+  syncHeldTotal(total) {
+    const ConfigManager = require('../config/ConfigManager');
+    const activeSource = ConfigManager.get('input.activeSource');
+    const maxGapMs = ConfigManager.get(`input.${activeSource}.heldTotalGapMs`, 5000);
+    const now = Date.now();
+    const framesInterrupted = this.lastScaleFrameAt === null || now - this.lastScaleFrameAt > maxGapMs;
+    const totalChanged = total !== this.lastRawCumulativeWeight;
+    this.lastScaleFrameAt = now;
+
+    if (framesInterrupted && totalChanged) {
+      this.cumulativeBaseOffset = total;
+      this.scaleResyncRequired = total > 0;
+      console.warn(`[StateManager] Scale frames were interrupted and the total changed to ${total}kg - base reset, reading 0kg until the next Weighing press`);
+      return;
+    }
+
+    if (totalChanged) {
+      this.scaleResyncRequired = false;
+    }
+
+    // A running total can only fall when the console was cleared, so nothing is left to subtract
+    if (total < this.cumulativeBaseOffset) {
+      this.cumulativeBaseOffset = 0;
+    }
+  }
+
+  /**
+   * Smallest axle weight accepted for capture. Multideck readings have no minimum.
+   */
+  getMinCaptureWeight() {
+    if (this.getMode() !== 'mobile') return 0;
+    try {
+      const ConfigManager = require('../config/ConfigManager');
+      return ConfigManager.get('thresholds.mobile.minCaptureWeight', 50);
+    } catch (err) {
+      return 50;
+    }
   }
 
   // ============ Mobile Mode Methods ============
@@ -562,6 +627,11 @@ class StateManager {
     if (this.lastRawCumulativeWeight > 0) {
       this.cumulativeBaseOffset = this.lastRawCumulativeWeight;
       console.log(`[StateManager.addAxleWeight] Axle ${axleData.axleNumber}: ${weight}kg, cumulativeBase updated to ${this.cumulativeBaseOffset}kg`);
+
+      // Frames can be a second apart, so clear this axle now to stop it being captured twice
+      if (this.holdsCumulativeTotal()) {
+        this.currentMobileWeight = 0;
+      }
     }
 
     const gvw = this.mobileState.axles.reduce((sum, a) => sum + a.weight, 0);
@@ -1123,6 +1193,10 @@ StateManager.setMode = function(mode) {
   return StateManager.getInstance().setMode(mode);
 };
 
+StateManager.getMinCaptureWeight = function() {
+  return StateManager.getInstance().getMinCaptureWeight();
+};
+
 StateManager.getMode = function() {
   return StateManager.getInstance().getMode();
 };
@@ -1168,6 +1242,9 @@ StateManager.setCurrentMobileWeight = function(weight, stable = true, scaleWeigh
     const useCumulative = ConfigManager.get(`input.${activeSource}.useCumulativeWeight`, false);
 
     if (useCumulative && !sm.simulation) {
+      if (sm.holdsCumulativeTotal()) {
+        sm.syncHeldTotal(weight);
+      }
       sm.lastRawCumulativeWeight = weight;
       trueWeight = Math.max(0, weight - sm.cumulativeBaseOffset);
     }

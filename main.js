@@ -534,6 +534,8 @@ function broadcastWeights(weights, error = null, weightData = null) {
         session: mobileState,
         gvw: capturedGvw,  // Sum of captured axles only
         scaleInfo: StateManager.getMobileScaleInfo(),
+        minCaptureWeight: StateManager.getMinCaptureWeight(),
+        scaleResyncRequired: sm.scaleResyncRequired,
         error: error,
         timestamp: new Date().toISOString()
       });
@@ -1271,6 +1273,11 @@ ipcMain.handle('mobile:capture-axle', async (event, data) => {
       return { success: false, error: 'No weight to capture' };
     }
 
+    const minCaptureWeight = StateManager.getMinCaptureWeight();
+    if (weight < minCaptureWeight) {
+      return { success: false, error: `${weight}kg is below the ${minCaptureWeight}kg minimum capture weight` };
+    }
+
     // Add axle weight to session
     const axleResult = StateManager.addAxleWeight(weight);
 
@@ -1284,7 +1291,7 @@ ipcMain.handle('mobile:capture-axle', async (event, data) => {
     const mobileState = StateManager.getMobileState();
 
     // Broadcast updated session to renderer
-    broadcastWeights(null, null, { currentWeight: weight });
+    broadcastWeights(null, null, { currentWeight: sm.holdsCumulativeTotal() ? 0 : weight });
 
     EventBus.emit('axle:captured', {
       ...axleResult,

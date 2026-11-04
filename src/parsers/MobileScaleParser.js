@@ -27,6 +27,13 @@
  *    - Fields: $ [gross weight] [net weight] [other]
  *    - Weight = gross weight field (first number); combined total of both pads
  *
+ * 5. WD2 Mode (serial over Bluetooth, continuous):
+ *    - "Portable axle scale 255-D" console (WD2-88888-5.0), Yaohua Protocol 1, 19200/8N1
+ *    - Frame format: STX "+00010001A" ETX (no line terminator), sent once per second
+ *    - Fields: sign, 6 weight digits (highest first), decimal position, 2-char XOR checksum
+ *    - Weight is the running vehicle total, updated by the console's Weighing button
+ *      (axle 1 = 80, axle 2 = 140 sends 80 then 220) and reset to 0 by its Clear button
+ *
  * Scale Weight Handling:
  *    - PAW: Always returns combined weight. scaleA = scaleB = total / 2
  *    - Haenni: May return scaleA/scaleB separately or as combined weight
@@ -50,6 +57,7 @@ class MobileScaleParser extends ParserInterface {
     // - 'haenni' for Haenni REST JSON
     // - 'mcgs' for MCGS serial frames ("=SG+0000123kR")
     // - 'giropes' for Giropes GI620 T8 Sipi 2 serial ("$    100       0 830")
+    // - 'wd2' for Portable axle scale 255-D, Yaohua Protocol 1 (STX "+00010001A" ETX)
     this.mode = config.mode || 'paw';
 
     // Track axle accumulation
@@ -75,8 +83,46 @@ class MobileScaleParser extends ParserInterface {
     if (this.mode === 'giropes') {
       return this.parseGiropes(data);
     }
+    if (this.mode === 'wd2') {
+      return this.parseWd2(data);
+    }
     // Default: PAW serial format
     return this.parsePawSerial(data);
+  }
+
+  /**
+   * Parse WD2 console frame in Yaohua Protocol 1: STX "+00010001A" ETX
+   *
+   * Fields:
+   *   sign, 6 weight digits (highest first), decimal position, 2-char XOR checksum
+   *   - checksum: XOR of sign through decimal position, sent as 2 uppercase hex characters
+   *   - "+00010001A" = 100 kg, "+00000001B" = 0 kg
+   *
+   * Frames carrying a bad checksum are rejected so a corrupted Bluetooth read
+   * can never surface as a weight.
+   */
+  parseWd2(data) {
+    if (!data) return null;
+
+    const raw = data.toString().trim();
+
+    const match = raw.match(/^\x02?([+-]\d{6}\d)([0-9A-F]{2})\x03?$/);
+    if (!match) return null;
+
+    let xor = 0;
+    for (let i = 0; i < match[1].length; i++) {
+      xor ^= match[1].charCodeAt(i);
+    }
+    if (xor.toString(16).toUpperCase().padStart(2, '0') !== match[2]) return null;
+
+    if (match[1][0] === '-') return null;
+
+    const digits = parseInt(match[1].substring(1, 7), 10);
+    const weight = digits / Math.pow(10, parseInt(match[1][7], 10));
+    if (isNaN(weight) || weight > 100000) return null;
+
+    this.scaleWeightMode = 'combined';
+    return this.createAxleResult(weight, raw, true);
   }
 
   /**
@@ -204,9 +250,9 @@ class MobileScaleParser extends ParserInterface {
    * @param {Object} scaleWeights - Optional separate scale weights { scaleA, scaleB }
    */
   createAxleResult(weight, raw, stable = true, scaleWeights = null) {
-    // Streaming scales (MCGS, Giropes) push live weight continuously; axle capture is done by the user
+    // Streaming scales (MCGS, Giropes, WD2) push weight continuously; axle capture is done by the user
     // via the frontend — do not auto-push to axles array here.
-    const isStreamingMode = this.mode === 'mcgs' || this.mode === 'giropes';
+    const isStreamingMode = this.mode === 'mcgs' || this.mode === 'giropes' || this.mode === 'wd2';
     if (!isStreamingMode && weight > 0 && weight !== this.axles[this.axles.length - 1]) {
       this.currentAxle++;
       this.axles.push(weight);
@@ -410,6 +456,11 @@ class MobileScaleParser extends ParserInterface {
       return /^\$\s+\d+\s+\d+\s+\d+/.test(data.toString().trim());
     }
 
+    if (this.mode === 'wd2') {
+      // WD2 Yaohua Protocol 1: STX "+00010001A" ETX
+      return /^\x02?[+-]\d{7}[0-9A-F]{2}\x03?$/.test(data.toString().trim());
+    }
+
     if (this.mode === 'paw-udp') {
       // PAW UDP: need at least 4 bytes for float
       return Buffer.isBuffer(data) ? data.length >= 4 : data.length >= 4;
@@ -439,7 +490,8 @@ class MobileScaleParser extends ParserInterface {
       'paw-udp': { protocol: 'PAW UDP Binary', description: 'PAW portable scale UDP IEEE 754 float' },
       'haenni': { protocol: 'Haenni REST API', description: 'Haenni portable scale JSON API' },
       'mcgs': { protocol: 'MCGS Serial', description: 'MCGS mobile scale serial (SG+NNNNNNkR frames)' },
-      'giropes': { protocol: 'Giropes Sipi 2', description: 'Giropes GI620 T8 mobile axle weigher (Sipi 2 serial)' }
+      'giropes': { protocol: 'Giropes Sipi 2', description: 'Giropes GI620 T8 mobile axle weigher (Sipi 2 serial)' },
+      'wd2': { protocol: 'Yaohua Protocol 1', description: 'Portable axle scale 255-D WD2 console (Yaohua serial over Bluetooth)' }
     };
 
     const info = protocols[this.mode] || protocols['paw'];

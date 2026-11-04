@@ -313,7 +313,7 @@ async function zeroHaenniScale() {
 **Cumulative Weight Logic**:
 MCGS scales often operate in a cumulative mode where each subsequent reading includes the weight of all previously weighed axles. TruConnect handles this by:
 1. Identifying if `useCumulativeWeight` is enabled for the source.
-2. Subtracting the current session GVW (sum of previously captured axles) from the raw reading.
+2. Subtracting the raw reading recorded at the last axle capture from the current raw reading. This stays correct when a capture notification is missed, unlike a sum of captured axles.
 3. Reporting the result as the "True" current axle weight.
 
 #### Example: 7-Axle Cumulative Weighing (MCGS)
@@ -1545,6 +1545,42 @@ Based on [Intercomp research](https://www.intercompcompany.com/):
 **Notes**:
 - MCGS is treated as a **mobile** input source (like PAW/Haenni)
 - WebSocket/API weight events are normalized to the same mobile structure used by existing portable scales
+
+### Portable Axle Scale 255-D WD2 (Bluetooth Serial)
+
+**Communication**: Bluetooth serial port, 19200 baud on the console, 8N1 (one frame per second)
+
+**Frame Format** (Yaohua Protocol 1, no line terminator):
+
+```
+STX +00022001B ETX
+```
+
+- Sign, 6 weight digits, decimal position, 2-character XOR checksum
+- The weight is the **running vehicle total**, updated by the console's Weighing button and reset by its Clear button
+
+**TruConnect Configuration** (from `src/config/defaults.js`):
+
+```json
+{
+  "input": {
+    "activeSource": "wd2",
+    "wd2": {
+      "type": "serial",
+      "protocol": "WD2",
+      "useCumulativeWeight": true,
+      "holdsCumulativeTotal": true,
+      "serial": {
+        "port": "COM5",
+        "baudRate": 19200,
+        "queryCommand": ""
+      }
+    }
+  }
+}
+```
+
+Captured frames, the operator workflow and known limits are in [WD2-WEIGHT-STRING.md](WD2-WEIGHT-STRING.md).
 
 ---
 
