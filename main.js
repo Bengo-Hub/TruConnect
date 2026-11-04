@@ -824,6 +824,15 @@ EventBus.on('input:resumed', () => {
   }
 });
 
+// A capture or reset from TruLoad changes the session with no new scale frame, and frames
+// can be seconds apart or paused, so the screen is refreshed here rather than waiting for one
+EventBus.on('truload:session-changed', () => {
+  broadcastWeights(null, null, {
+    currentWeight: StateManager.getCurrentMobileWeight(),
+    stable: StateManager.getInstance().mobileWeightStable !== false
+  });
+});
+
 // Setup values from TruLoad, shown in the Weighing Setup section
 EventBus.on('truload:setup', (data) => {
   if (mainWindow && !mainWindow.isDestroyed()) {

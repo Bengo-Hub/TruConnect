@@ -234,6 +234,7 @@ setTimeout(() => {
   const sentToClient = [];
   ws.clients = new Map([['c1', { registered: true, stationCode: 'T', bound: 'A' }]]);
   ws.sendToClient = (id, type, data) => sentToClient.push({ type, data });
+  ws.broadcastToRegistered = () => {};
 
   const previousMode = sm.mode;
   sm.mode = 'mobile';

@@ -733,6 +733,10 @@ class WebSocketOutput extends EventEmitter {
     const isComplete = StateManager.isWeighingComplete();
     const mobileState = StateManager.getMobileState();
 
+    // The next scale frame may be seconds away, so report the new state now
+    EventBus.emit('truload:session-changed', { axleNumber, weight });
+    this.broadcastWeight({ currentWeight: StateManager.getCurrentMobileWeight(), stable: true }, 'mobile');
+
     // Acknowledge capture
     this.sendToClient(clientId, 'axle-captured-ack', {
       success: true,
@@ -891,6 +895,7 @@ class WebSocketOutput extends EventEmitter {
     }
 
     EventBus.emit('truload:setup', { reset: true });
+    EventBus.emit('truload:session-changed', { reset: true });
 
     this.sendToClient(clientId, 'session-reset-ack', { success: true });
   }

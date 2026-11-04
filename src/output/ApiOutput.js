@@ -518,6 +518,7 @@ class ApiOutput extends EventEmitter {
 
         StateManager.addAxleWeight(weight);
         EventBus.emit('axle:captured', { axleNumber, weight, source: 'api' });
+        EventBus.emit('truload:session-changed', { axleNumber, weight });
         const isComplete = StateManager.isWeighingComplete();
         const mobileState = StateManager.getMobileState();
         const expectedAxles = StateManager.getAxleConfiguration().expectedAxles;

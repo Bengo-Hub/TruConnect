@@ -263,6 +263,27 @@ polled.openedAt = 1000;
 polled.on('silent', () => assert(false, 'query-driven devices are not watched'));
 polled.checkSilence(60000);
 
+// ── A capture from TruLoad reaches both screens without waiting for a frame ───
+
+const captureMessages = [];
+const sessionChanges = [];
+EventBus.on('truload:session-changed', (data) => sessionChanges.push(data));
+const broadcastBeforeCapture = ws.broadcastToRegistered;
+ws.broadcastToRegistered = (type, data) => { if (type === 'weight') captureMessages.push(data); };
+const captureState = StateManager.getInstance();
+captureState.reset();
+captureState.mode = 'mobile';
+captureState.currentMobileWeight = 60;
+ws.clients.get('s1').registered = true;
+BackendClient.shouldSendAutoweigh = () => false;
+BackendClient.hasSyncedTransaction = () => true;
+ws.handleAxleCaptured('s1', { axleNumber: 1 });
+assert(sessionChanges.length === 1 && sessionChanges[0].axleNumber === 1, 'TruConnect screen is told about a capture straight away');
+assert(captureMessages.length === 1 && captureMessages[0].session.axles.length === 1, 'TruLoad gets the captured axle straight away');
+ws.handleResetSession('s1');
+assert(sessionChanges.length === 2 && sessionChanges[1].reset === true, 'TruConnect screen is told about a reset straight away');
+ws.broadcastToRegistered = broadcastBeforeCapture;
+
 // ── A client connecting while no frames are arriving ─────────────────────────
 
 const statusMessages = [];
