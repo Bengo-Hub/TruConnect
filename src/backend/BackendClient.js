@@ -806,6 +806,75 @@ class BackendClient {
   }
 
   /**
+   * Start the session for a transaction TruLoad has just synced.
+   *
+   * TruLoad's mobile screen captures every axle before Next creates its transaction, so the
+   * auto record and its local weighing usually exist before this call. A fresh session
+   * would drop that weighing's id and leave it pending for ever, so the capture is kept
+   * when it is still open and is for the same vehicle. TruLoad also re-syncs on every
+   * axle-configuration change, which keeps the same weighing through each call.
+   */
+  syncTransactionSession(data) {
+    const previous = { ...this.currentSession };
+    this.syncFromTransaction(data);
+    this.startSession({
+      weighingTransactionId: data.transactionId,
+      regNumber: data.vehicleRegNumber,
+      weighingMode: data.weighingMode,
+      workflow: data.workflow
+    });
+
+    if (!previous.localSessionId) return;
+    let record = null;
+    try {
+      record = require('./LocalWeighingStore').get(previous.localSessionId);
+    } catch (err) {
+      console.warn('[BackendClient] Could not read the local weighing to keep:', err.message);
+      return;
+    }
+    if (!record || record.isFinal || record.mode !== 'enforcement') return;
+    const plate = (value) => String(value || '').toUpperCase().replace(/\s+/g, '');
+    const recordPlate = plate(record.vehicleRegNumber);
+    if (recordPlate && recordPlate !== 'UNKNOWN' && recordPlate !== plate(data.vehicleRegNumber)) return;
+
+    this.currentSession.localSessionId = previous.localSessionId;
+    this.currentSession.transactionId = previous.transactionId;
+    this.currentSession.isAutoweighSent = previous.isAutoweighSent;
+    this.currentSession.autoweighGvw = previous.autoweighGvw;
+    console.log(`[BackendClient] Kept local weighing ${previous.localSessionId} for TruLoad transaction ${data.transactionId}`);
+  }
+
+  /**
+   * End a session TruLoad finished (weights-captured or reset-session). TruLoad submits the
+   * final weights itself, so this closes the local weighing that would otherwise stay
+   * pending, links any of its calls still queued to TruLoad's transaction, then resets.
+   *
+   * @param {{submitted: boolean}} outcome - true for weights-captured, the final submit
+   */
+  finishTruLoadSession({ submitted }) {
+    const { localSessionId, weighingTransactionId, vehicleRegNumber } = this.currentSession;
+    if (localSessionId) {
+      try {
+        if (weighingTransactionId) {
+          require('./SyncQueue').linkSessionToTransaction(localSessionId, weighingTransactionId);
+        }
+        const record = require('./LocalWeighingStore').closeEndedByTruLoad(localSessionId, {
+          transactionId: weighingTransactionId,
+          vehicleRegNumber,
+          submitted
+        });
+        if (record) {
+          console.log(`[BackendClient] Local weighing ${localSessionId} closed by TruLoad: ${record.syncStatus}`);
+          this.eventBus.emitEvent('local-weighing:closed', { localId: localSessionId, syncStatus: record.syncStatus });
+        }
+      } catch (err) {
+        console.warn('[BackendClient] Could not close the local weighing TruLoad ended:', err.message);
+      }
+    }
+    this.resetSession();
+  }
+
+  /**
    * Check if autoweigh was already sent for this session
    */
   isAutoweighSent() {
@@ -1037,6 +1106,14 @@ BackendClient.cancelSession = function() {
 
 BackendClient.resetSession = function() {
   return BackendClient.getInstance().resetSession();
+};
+
+BackendClient.syncTransactionSession = function(data) {
+  return BackendClient.getInstance().syncTransactionSession(data);
+};
+
+BackendClient.finishTruLoadSession = function(outcome) {
+  return BackendClient.getInstance().finishTruLoadSession(outcome);
 };
 
 BackendClient.getSession = function() {

@@ -642,16 +642,8 @@ class WebSocketOutput extends EventEmitter {
     // Store transaction sync data in StateManager
     StateManager.setTransactionSync(data);
 
-    // Sync to BackendClient so autoweigh includes the transaction ID
-    BackendClient.syncFromTransaction(data);
-
-    // Start a backend session with the synced data
-    BackendClient.startSession({
-      weighingTransactionId: data.transactionId,
-      regNumber: data.vehicleRegNumber,
-      weighingMode: data.weighingMode,
-      workflow: data.workflow
-    });
+    // Start the backend session for this transaction, keeping an axle capture taken before it
+    BackendClient.syncTransactionSession(data);
 
     // Update axle configuration if provided
     if (data.totalAxles) {
@@ -889,10 +881,8 @@ class WebSocketOutput extends EventEmitter {
     // Full state reset in StateManager
     StateManager.getInstance().reset();
 
-    // Reset backend session if applicable
-    if (typeof BackendClient !== 'undefined' && BackendClient.resetSession) {
-      BackendClient.resetSession();
-    }
+    // TruLoad ended the weighing (multideck sends this after its final submit too)
+    BackendClient.finishTruLoadSession({ submitted: false });
 
     EventBus.emit('truload:setup', { reset: true });
     EventBus.emit('truload:session-changed', { reset: true });
@@ -943,9 +933,8 @@ class WebSocketOutput extends EventEmitter {
     // Full state reset and prepare for next vehicle
     StateManager.getInstance().reset();
 
-    if (typeof BackendClient !== 'undefined' && BackendClient.resetSession) {
-      BackendClient.resetSession();
-    }
+    // TruLoad submitted the final weights itself, so close the local weighing
+    BackendClient.finishTruLoadSession({ submitted: true });
 
     this.sendToClient(clientId, 'weights-captured-ack', { success: true });
   }

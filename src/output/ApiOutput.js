@@ -459,13 +459,7 @@ class ApiOutput extends EventEmitter {
       }
       try {
         StateManager.setTransactionSync(data);
-        BackendClient.syncFromTransaction(data);
-        BackendClient.startSession({
-          weighingTransactionId: data.transactionId,
-          regNumber: data.vehicleRegNumber,
-          weighingMode: data.weighingMode,
-          workflow: data.workflow
-        });
+        BackendClient.syncTransactionSession(data);
         if (data.totalAxles) {
           StateManager.setAxleConfiguration({
             expectedAxles: data.totalAxles,
@@ -619,7 +613,7 @@ class ApiOutput extends EventEmitter {
         EventBus.emit('truload:setup', { reset: true });
         StateManager.setPlate(null, null);
         StateManager.clearTransactionSync();
-        BackendClient.resetSession();
+        BackendClient.finishTruLoadSession({ submitted: false });
         StateManager.getInstance().reset();
         res.json({
           success: true,
@@ -701,6 +695,7 @@ class ApiOutput extends EventEmitter {
     router.post('/weights-captured', (req, res) => {
       try {
         StateManager.getInstance().reset();
+        BackendClient.finishTruLoadSession({ submitted: true });
         res.json({ success: true, timestamp: new Date().toISOString() });
       } catch (err) {
         console.error('[ApiOutput] weights-captured error:', err.message);

@@ -101,6 +101,94 @@ function discard(localId) {
   return get(localId);
 }
 
+/** Calls for this weighing that TruConnect still has to send. */
+function openQueueCount(localId) {
+  const row = db().get(
+    `SELECT COUNT(*) as n FROM weighing_queue
+     WHERE local_session_id = ? AND status IN ('pending', 'sending')`,
+    [localId]
+  );
+  return row ? row.n : 0;
+}
+
+function latestSyncedTransactionId(localId) {
+  const row = db().get(
+    `SELECT backend_transaction_id FROM weighing_queue
+     WHERE local_session_id = ? AND status = 'synced' AND backend_transaction_id IS NOT NULL
+     ORDER BY updated_at DESC LIMIT 1`,
+    [localId]
+  );
+  return row ? row.backend_transaction_id : null;
+}
+
+function finalize(localId, syncStatus, backendTransactionId, vehicleRegNumber) {
+  db()
+    .prepare(
+      `UPDATE local_weighings SET
+        is_final = 1,
+        sync_status = ?,
+        backend_transaction_id = COALESCE(?, backend_transaction_id),
+        vehicle_reg_number = CASE WHEN vehicle_reg_number = 'UNKNOWN' AND ? IS NOT NULL THEN ? ELSE vehicle_reg_number END,
+        updated_at = ?
+       WHERE local_id = ?`
+    )
+    .run(syncStatus, backendTransactionId || null, vehicleRegNumber || null, vehicleRegNumber || null, new Date().toISOString(), localId);
+  return get(localId);
+}
+
+/**
+ * Close an enforcement weighing that TruLoad ended itself. TruLoad submits the final
+ * weights straight to the backend, so TruConnect never runs completeSession for it and
+ * the row would otherwise stay pending for ever.
+ *
+ * @param {string} localId
+ * @param {{transactionId?: string|null, vehicleRegNumber?: string|null, submitted: boolean}} outcome
+ *   submitted is false when TruLoad reset before any transaction existed, which is an
+ *   abandoned capture and is closed the same way as the operator's Discard.
+ */
+function closeEndedByTruLoad(localId, { transactionId, vehicleRegNumber, submitted }) {
+  const row = get(localId);
+  if (!row || row.isFinal || row.mode !== 'enforcement') return row;
+  if (!submitted && !transactionId) return discard(localId);
+  const syncStatus = openQueueCount(localId) > 0 ? 'queued' : 'synced';
+  return finalize(localId, syncStatus, transactionId || latestSyncedTransactionId(localId), vehicleRegNumber);
+}
+
+/**
+ * A finished weighing becomes synced once none of its calls are left to send. Run after
+ * each queued call syncs, so captures made offline stop showing as pending.
+ */
+function reconcile(localId) {
+  const row = get(localId);
+  if (!row || !row.isFinal || !['pending', 'queued'].includes(row.syncStatus)) return row;
+  if (openQueueCount(localId) > 0) return row;
+  return markSyncStatus(localId, 'synced', latestSyncedTransactionId(localId));
+}
+
+/**
+ * Close enforcement weighings left open by an earlier run. Their session lived in memory
+ * only and enforcement has no resume, so nothing can finish them: they were ended in
+ * TruLoad or abandoned. A row whose call reached the backend is synced, one with a call
+ * still queued keeps waiting for it, and one that never left this device is discarded.
+ * Runs at startup, before any new session exists.
+ *
+ * @returns {number} rows closed
+ */
+function closeStaleOpenWeighings() {
+  const rows = db().all(
+    `SELECT local_id FROM local_weighings
+     WHERE is_final = 0 AND mode = 'enforcement'
+       AND sync_status IN ('pending', 'queued', 'awaiting_station_resolution')`
+  );
+  for (const { local_id: localId } of rows) {
+    const transactionId = latestSyncedTransactionId(localId);
+    if (openQueueCount(localId) > 0) finalize(localId, 'queued', transactionId);
+    else if (transactionId) finalize(localId, 'synced', transactionId);
+    else discard(localId);
+  }
+  return rows.length;
+}
+
 function markSyncStatus(localId, syncStatus, backendTransactionId) {
   db()
     .prepare(
@@ -195,6 +283,9 @@ module.exports = {
   upsert,
   markSyncStatus,
   discard,
+  closeEndedByTruLoad,
+  reconcile,
+  closeStaleOpenWeighings,
   get,
   listPending,
   countPending,

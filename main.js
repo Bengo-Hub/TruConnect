@@ -316,6 +316,15 @@ async function initializeApp() {
     // Start the offline sync queue's own periodic drain (independent of the connectivity
     // poll, so due retries/backoffs still get processed between poll ticks) and run one
     // drain pass immediately in case rows were left over from a previous run.
+    // Close enforcement weighings an earlier run left open (mostly ones TruLoad finished
+    // itself, which older versions never closed), before any new session starts.
+    try {
+      const closed = require('./src/backend/LocalWeighingStore').closeStaleOpenWeighings();
+      if (closed > 0) console.log(`Closed ${closed} local weighing(s) left open by an earlier run`);
+    } catch (err) {
+      console.error('Closing stale local weighings failed:', err.message);
+    }
+
     SyncQueue.startPeriodicDrain(20000);
     SyncQueue.drain().catch(err => console.error('Initial sync queue drain failed:', err.message));
 

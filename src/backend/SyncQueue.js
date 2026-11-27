@@ -131,6 +131,31 @@ class SyncQueue {
     return payload;
   }
 
+  /**
+   * Point every unsent call of a weighing at the TruLoad transaction that now owns it.
+   * A call captured before TruLoad created its transaction carries no id, and sent late
+   * it would open a second transaction; with the id the backend leaves a transaction
+   * TruLoad already captured unchanged.
+   *
+   * @returns {number} rows patched
+   */
+  linkSessionToTransaction(localSessionId, transactionId) {
+    if (!localSessionId || !transactionId) return 0;
+    const rows = this._db().all(
+      `SELECT * FROM weighing_queue WHERE local_session_id = ? AND status IN ('pending', 'dead_letter')`,
+      [localSessionId]
+    );
+    let patched = 0;
+    for (const row of rows) {
+      const before = JSON.parse(row.payload).weighingTransactionId;
+      if (!before) {
+        this._patchWeighingTransactionId(row, transactionId);
+        patched++;
+      }
+    }
+    return patched;
+  }
+
   _handleFailure(row, errorMessage) {
     const db = this._db();
     const attempts = row.attempts + 1;
@@ -247,6 +272,11 @@ class SyncQueue {
           result
         });
         EventBus.emit('sync-queue:status-changed', this.getStatus());
+        try {
+          require('./LocalWeighingStore').reconcile(row.local_session_id);
+        } catch (err) {
+          console.warn(`[SyncQueue] Could not update the local weighing for row ${row.id}:`, err.message);
+        }
         return result;
       }
 
@@ -377,6 +407,7 @@ module.exports = {
   attempt: (rowId) => getInstance().attempt(rowId),
   drain: () => getInstance().drain(),
   retryDeadLetters: () => getInstance().retryDeadLetters(),
+  linkSessionToTransaction: (localSessionId, transactionId) => getInstance().linkSessionToTransaction(localSessionId, transactionId),
   getStatus: () => getInstance().getStatus(),
   startPeriodicDrain: (intervalMs) => getInstance().startPeriodicDrain(intervalMs),
   stopPeriodicDrain: () => getInstance().stopPeriodicDrain(),
